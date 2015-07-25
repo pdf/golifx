@@ -3,6 +3,14 @@
 __Note:__ This library is at a moderately early stage - everything should work,
 but the V2 protocol implementation needs documentation and testing.
 
+If you have Go installed, you can install the `lifx` CLI application like so:
+
+```shell
+go get github.com/pdf/golifx/cmd/lifx
+```
+
+The `lifx` command will be available at `${GOPATH}/bin/lifx`
+
 # golifx
 --
     import "github.com/pdf/golifx"
@@ -171,12 +179,25 @@ SetPower broadcasts a request to change the power state of all devices on the
 network. A state of true requests power on, and a state of false requests power
 off.
 
+#### func (*Client) SetPowerDuration
+
+```go
+func (c *Client) SetPowerDuration(state bool, duration time.Duration) error
+```
+SetPowerDuration broadcasts a request to change the power state of all devices
+on the network, transitioning over the specified duration. A state of true
+requests power on, and a state of false requests power off. Not all device types
+support transitioning, so if you wish to change the state of all device types,
+you should use SetPower instead.
+
 #### func (*Client) SetRetryInterval
 
 ```go
 func (c *Client) SetRetryInterval(retryInterval time.Duration)
 ```
-SetRetryInterval sets the retry interval for operations on this client
+SetRetryInterval sets the retry interval for operations on this client. If a
+timeout has been set, and the retry interval exceeds the timeout, the retry
+interval will be set to half the timeout
 
 #### func (*Client) SetTimeout
 
