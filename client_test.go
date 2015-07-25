@@ -67,9 +67,18 @@ var _ = Describe("Golifx", func() {
 		})
 
 		It("should update the retry interval", func() {
-			interval := 5 * time.Second
+			interval := 5 * time.Millisecond
 			client.SetRetryInterval(interval)
 			Expect(client.GetRetryInterval()).To(Equal(&interval))
+		})
+
+		It("should set the retry to half the timeout if it's >= the timeout", func() {
+			timeout := 10 * time.Second
+			halfTimeout := timeout / 2
+			client.SetTimeout(timeout)
+			interval := 10 * time.Second
+			client.SetRetryInterval(interval)
+			Expect(client.GetRetryInterval()).To(Equal(&halfTimeout))
 		})
 
 		It("should update the discovery interval", func() {

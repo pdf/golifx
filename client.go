@@ -241,8 +241,13 @@ func (c *Client) GetTimeout() *time.Duration {
 	return &c.timeout
 }
 
-// SetRetryInterval sets the retry interval for operations on this client
+// SetRetryInterval sets the retry interval for operations on this client.  If
+// a timeout has been set, and the retry interval exceeds the timeout, the retry
+// interval will be set to half the timeout
 func (c *Client) SetRetryInterval(retryInterval time.Duration) {
+	if c.timeout > 0 && retryInterval >= c.timeout {
+		retryInterval = c.timeout / 2
+	}
 	c.retryInterval = retryInterval
 }
 
