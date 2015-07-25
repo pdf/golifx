@@ -4,6 +4,9 @@
 
 // Package golifx provides a simple Go interface to the LIFX LAN protocol.
 //
+// Based on the protocol documentation available at:
+// http://lan.developer.lifx.com/
+//
 // Also included in cmd/lifx is a small CLI utility that allows interacting with
 // your LIFX devices on the LAN.
 package golifx
