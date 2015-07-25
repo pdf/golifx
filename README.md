@@ -1,5 +1,8 @@
 [![Build Status](https://drone.io/github.com/pdf/golifx/status.png)](https://drone.io/github.com/pdf/golifx/latest) [![GoDoc](https://godoc.org/github.com/pdf/golifx?status.svg)](http://godoc.org/github.com/pdf/golifx) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
 
+__Note:__ This library is at a moderately early stage - everything should work,
+but the V2 protocol implementation needs documentation and testing.
+
 # golifx
 --
     import "github.com/pdf/golifx"
