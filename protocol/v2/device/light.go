@@ -111,9 +111,6 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	if state {
 		p.Level = math.MaxUint16
 	}
-	if l.power == p.Level {
-		return nil
-	}
 	p.Duration = uint32(duration / time.Millisecond)
 
 	pkt := packet.New(l.address, l.requestSocket)
