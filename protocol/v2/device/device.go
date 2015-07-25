@@ -352,9 +352,14 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 			d.Unlock()
 
 			go func() {
+				var timeout <-chan time.Time
 				pktResponse := packet.Response{}
 				tick := time.Tick(*d.retryInterval)
-				timeout := time.After(*d.timeout)
+				if d.timeout == nil || *d.timeout == 0 {
+					timeout = make(<-chan time.Time, 1)
+				} else {
+					timeout = time.After(*d.timeout)
+				}
 				for {
 					select {
 					case <-d.quitChan:

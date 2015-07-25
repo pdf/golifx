@@ -28,19 +28,10 @@ var _ = Describe("Golifx", func() {
 		client       *Client
 	)
 
-	BeforeEach(func() {
+	It("should send discovery to the protocol on NewClient", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockProtocol = mock.NewMockProtocol(mockCtrl)
 
-		mockDevice = mock.NewMockDevice(mockCtrl)
-		mockLight = mock.NewMockLight(mockCtrl)
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
-	It("should send discovery to the protocol on NewClient", func() {
 		gomock.InOrder(
 			mockProtocol.EXPECT().SetClient(gomock.Any()),
 			mockProtocol.EXPECT().Discover(),
@@ -48,16 +39,28 @@ var _ = Describe("Golifx", func() {
 		client, err := NewClient(mockProtocol)
 		Expect(client).To(BeAssignableToTypeOf(new(Client)))
 		Expect(err).NotTo(HaveOccurred())
+		mockCtrl.Finish()
 	})
 
 	Describe("Client", func() {
 		BeforeEach(func() {
+			mockCtrl = gomock.NewController(GinkgoT())
+			mockProtocol = mock.NewMockProtocol(mockCtrl)
 			gomock.InOrder(
 				mockProtocol.EXPECT().SetClient(gomock.Any()),
-				mockProtocol.EXPECT().Discover(),
+				mockProtocol.EXPECT().Discover().AnyTimes(),
 			)
 			client, _ = NewClient(mockProtocol)
 			client.SetTimeout(50 * time.Millisecond)
+			mockCtrl.Finish()
+
+			mockCtrl = gomock.NewController(GinkgoT())
+			mockDevice = mock.NewMockDevice(mockCtrl)
+			mockLight = mock.NewMockLight(mockCtrl)
+		})
+
+		AfterEach(func() {
+			mockCtrl.Finish()
 		})
 
 		It("should update the timeout", func() {
@@ -91,6 +94,12 @@ var _ = Describe("Golifx", func() {
 			Expect(client.SetDiscoveryInterval(interval)).To(Succeed())
 			interval = 10 * time.Second
 			Expect(client.SetDiscoveryInterval(interval)).To(Succeed())
+		})
+
+		It("should perform discovery on the interval", func() {
+			client.SetDiscoveryInterval(5 * time.Millisecond)
+			mockProtocol.EXPECT().Discover().Times(2)
+			time.Sleep(11 * time.Millisecond)
 		})
 
 		It("should send SetPower to the protocol", func() {
@@ -181,7 +190,7 @@ var _ = Describe("Golifx", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("should return an error with the ID is not known", func() {
+				It("should return an error when the ID is not known", func() {
 					_, err := client.GetDeviceByID(deviceUnkownID)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
@@ -197,6 +206,31 @@ var _ = Describe("Golifx", func() {
 					mockDevice.EXPECT().GetLabel().Return(deviceLabel, nil).AnyTimes()
 					_, err := client.GetDeviceByLabel(deviceUnkownLabel)
 					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				Context("with zero timeout", func() {
+					BeforeEach(func() {
+						client.SetTimeout(0)
+					})
+
+					It("should not timeout searching by ID", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						_, err := client.GetDeviceByID(deviceUnkownID)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockDevice.EXPECT().GetLabel().Return(deviceLabel, nil).AnyTimes()
+						_, err := client.GetDeviceByLabel(deviceUnkownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
 				})
 			})
 
@@ -241,7 +275,7 @@ var _ = Describe("Golifx", func() {
 				It("should not return a known device by ID if it is not a light", func() {
 					light, err := client.GetLightByID(deviceID)
 					Expect(light).To(BeNil())
-					Expect(err).To(MatchError(common.ErrNotFound))
+					Expect(err).To(HaveOccurred())
 				})
 
 				It("should return it by label when known", func() {
@@ -258,6 +292,30 @@ var _ = Describe("Golifx", func() {
 					light, err := client.GetLightByLabel(deviceLabel)
 					Expect(light).To(BeNil())
 					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				Context("with zero timeout", func() {
+					BeforeEach(func() {
+						client.SetTimeout(0)
+					})
+
+					It("should not timeout searching by ID", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						_, err := client.GetLightByID(deviceUnkownID)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						_, err := client.GetLightByLabel(deviceUnkownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
 				})
 
 			})

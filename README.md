@@ -205,4 +205,5 @@ interval will be set to half the timeout
 func (c *Client) SetTimeout(timeout time.Duration)
 ```
 SetTimeout sets the time that client operations wait for results before
-returning an error
+returning an error. The special value of 0 may be set to disable timeouts, and
+all operations will wait indefinitely, but this is not recommended.

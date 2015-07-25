@@ -83,8 +83,13 @@ func (c *Client) GetDevices() ([]common.Device, error) {
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
+	var timeout <-chan time.Time
 	tick := time.Tick(c.internalRetryInterval)
-	timeout := time.After(c.timeout)
+	if c.timeout > 0 {
+		timeout = time.After(c.timeout)
+	} else {
+		timeout = make(<-chan time.Time, 1)
+	}
 	for {
 		select {
 		case <-tick:
@@ -104,8 +109,13 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
+	var timeout <-chan time.Time
 	tick := time.Tick(c.internalRetryInterval)
-	timeout := time.After(c.timeout)
+	if c.timeout > 0 {
+		timeout = time.After(c.timeout)
+	} else {
+		timeout = make(<-chan time.Time, 1)
+	}
 	for {
 		select {
 		case <-tick:
@@ -149,12 +159,16 @@ func (c *Client) GetLights() (lights []common.Light, err error) {
 // light.
 func (c *Client) GetLightByID(id uint64) (light common.Light, err error) {
 	var ok bool
+	var timeout <-chan time.Time
 	tick := time.Tick(c.internalRetryInterval)
-	timeout := time.After(c.timeout)
+	if c.timeout > 0 {
+		timeout = time.After(c.timeout)
+	} else {
+		timeout = make(<-chan time.Time, 1)
+	}
 	for {
 		select {
 		case <-tick:
-			err = nil
 			dev, err := c.GetDeviceByID(id)
 			if err == nil {
 				if light, ok = dev.(common.Light); !ok {
@@ -179,8 +193,13 @@ func (c *Client) GetLightByID(id uint64) (light common.Light, err error) {
 // light.
 func (c *Client) GetLightByLabel(label string) (light common.Light, err error) {
 	var ok bool
+	var timeout <-chan time.Time
 	tick := time.Tick(c.internalRetryInterval)
-	timeout := time.After(c.timeout)
+	if c.timeout > 0 {
+		timeout = time.After(c.timeout)
+	} else {
+		timeout = make(<-chan time.Time, 1)
+	}
 	for {
 		select {
 		case <-tick:
@@ -239,7 +258,8 @@ func (c *Client) SetDiscoveryInterval(interval time.Duration) error {
 }
 
 // SetTimeout sets the time that client operations wait for results before
-// returning an error
+// returning an error.  The special value of 0 may be set to disable timeouts,
+// and all operations will wait indefinitely, but this is not recommended.
 func (c *Client) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
 }

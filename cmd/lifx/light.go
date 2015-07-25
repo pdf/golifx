@@ -75,11 +75,15 @@ func init() {
 
 func lightList(c *cobra.Command, args []string) {
 	var (
-		err    error
-		lights []common.Light
+		err     error
+		lights  []common.Light
+		timeout <-chan time.Time
 	)
 
-	timeout := time.After(flagTimeout)
+	if flagTimeout == 0 {
+		logger.Fatalln(`Can not list with a timeout of zero`)
+	}
+	timeout = time.After(flagTimeout)
 	tick := time.Tick(100 * time.Millisecond)
 	timedOut := false
 
