@@ -98,6 +98,12 @@ var _ = Describe("Golifx", func() {
 			client.SetPower(true)
 		})
 
+		It("should send SetPowerDuration to the protocol", func() {
+			duration := 5 * time.Second
+			mockProtocol.EXPECT().SetPowerDuration(true, duration)
+			client.SetPowerDuration(true, duration)
+		})
+
 		It("should send SetColor to the protocol", func() {
 			color := common.Color{}
 			duration := 1 * time.Millisecond

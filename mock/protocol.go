@@ -30,8 +30,8 @@ func (_m *MockProtocol) EXPECT() *_MockProtocolRecorder {
 	return _m.recorder
 }
 
-func (_m *MockProtocol) SetClient(_param0 common.Client) {
-	_m.ctrl.Call(_m, "SetClient", _param0)
+func (_m *MockProtocol) SetClient(client common.Client) {
+	_m.ctrl.Call(_m, "SetClient", client)
 }
 
 func (_mr *_MockProtocolRecorder) SetClient(arg0 interface{}) *gomock.Call {
@@ -58,8 +58,8 @@ func (_mr *_MockProtocolRecorder) Close() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Close")
 }
 
-func (_m *MockProtocol) SetPower(_param0 bool) error {
-	ret := _m.ctrl.Call(_m, "SetPower", _param0)
+func (_m *MockProtocol) SetPower(state bool) error {
+	ret := _m.ctrl.Call(_m, "SetPower", state)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
@@ -68,8 +68,18 @@ func (_mr *_MockProtocolRecorder) SetPower(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetPower", arg0)
 }
 
-func (_m *MockProtocol) SetColor(_param0 common.Color, _param1 time.Duration) error {
-	ret := _m.ctrl.Call(_m, "SetColor", _param0, _param1)
+func (_m *MockProtocol) SetPowerDuration(state bool, duration time.Duration) error {
+	ret := _m.ctrl.Call(_m, "SetPowerDuration", state, duration)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockProtocolRecorder) SetPowerDuration(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetPowerDuration", arg0, arg1)
+}
+
+func (_m *MockProtocol) SetColor(color common.Color, duration time.Duration) error {
+	ret := _m.ctrl.Call(_m, "SetColor", color, duration)
 	ret0, _ := ret[0].(error)
 	return ret0
 }

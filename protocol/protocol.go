@@ -30,6 +30,9 @@ type Protocol interface {
 
 	// SetPower sets the power state globally, on all devices
 	SetPower(state bool) error
+	// SetPowerDuration sets the power state globally, on all lights, over the
+	// specified duration
+	SetPowerDuration(state bool, duration time.Duration) error
 	// SetColor changes the color globally, on all lights, over the specified
 	// duration
 	SetColor(color common.Color, duration time.Duration) error

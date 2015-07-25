@@ -209,6 +209,15 @@ func (c *Client) SetPower(state bool) error {
 	return c.protocol.SetPower(state)
 }
 
+// SetPowerDuration broadcasts a request to change the power state of all
+// devices on the network, transitioning over the specified duration.  A state
+// of true requests power on, and a state of false requests power off.  Not all
+// device types support transitioning, so if you wish to change the state of all
+// device types, you should use SetPower instead.
+func (c *Client) SetPowerDuration(state bool, duration time.Duration) error {
+	return c.protocol.SetPowerDuration(state, duration)
+}
+
 // SetColor broadcasts a request to change the color of all devices on the
 // network.
 func (c *Client) SetColor(color common.Color, duration time.Duration) error {

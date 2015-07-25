@@ -176,3 +176,13 @@ func (_m *MockLight) GetColor() (common.Color, error) {
 func (_mr *_MockLightRecorder) GetColor() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetColor")
 }
+
+func (_m *MockLight) SetPowerDuration(state bool, duration time.Duration) error {
+	ret := _m.ctrl.Call(_m, "SetPowerDuration", state, duration)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockLightRecorder) SetPowerDuration(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetPowerDuration", arg0, arg1)
+}

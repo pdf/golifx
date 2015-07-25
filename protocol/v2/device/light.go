@@ -119,6 +119,8 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	pkt := packet.New(l.address, l.requestSocket)
 	pkt.SetType(LightSetPower)
 	pkt.SetPayload(p)
+
+	common.Log.Debugf("Setting power state on %v: %v\n", l.id, state)
 	if _, err := l.Send(pkt, false, false); err != nil {
 		return err
 	}

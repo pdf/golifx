@@ -20,7 +20,7 @@ type V2 struct {
 	client        common.Client
 	timeout       *time.Duration
 	retryInterval *time.Duration
-	broadcast     *device.Device
+	broadcast     *device.Light
 	lastDiscovery time.Time
 	devices       map[uint64]device.GenericDevice
 	quitChan      chan bool
@@ -47,10 +47,11 @@ func (p *V2) init() error {
 			IP:   net.IPv4(255, 255, 255, 255),
 			Port: shared.DefaultPort,
 		}
-		p.broadcast, err = device.New(&addr, p.socket, p.timeout, p.retryInterval, nil)
+		dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, nil)
 		if err != nil {
 			return err
 		}
+		p.broadcast = &device.Light{Device: *dev}
 		p.devices = make(map[uint64]device.GenericDevice)
 		p.quitChan = make(chan bool, 1)
 		go p.dispatcher()
@@ -106,11 +107,15 @@ func (p *V2) SetPower(state bool) error {
 	return p.broadcast.SetPower(state)
 }
 
+// SetPower sets the power state globally, on all devices
+func (p *V2) SetPowerDuration(state bool, duration time.Duration) error {
+	return p.broadcast.SetPowerDuration(state, duration)
+}
+
 // SetColor changes the color globally, on all lights, over the specified
 // duration
 func (p *V2) SetColor(color common.Color, duration time.Duration) error {
-	light := &device.Light{Device: *p.broadcast}
-	return light.SetColor(color, duration)
+	return p.broadcast.SetColor(color, duration)
 }
 
 // Close closes the protocol driver, no further communication with the protocol
