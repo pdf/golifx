@@ -59,7 +59,6 @@ func init() {
 	cmdLightColor.Flags().Uint16VarP(&flagLightSaturation, `saturation`, `S`, 0, `saturation component of the HSBK color (0-65535)`)
 	cmdLightColor.Flags().Uint16VarP(&flagLightBrightness, `brightness`, `B`, 0, `brightness component of the HSBK color (0-65535)`)
 	cmdLightColor.Flags().Uint16VarP(&flagLightKelvin, `kelvin`, `K`, 0, `kelvin component of the HSBK color, the color temperature of whites (2500-9000)`)
-	cmdLightColor.Flags().DurationVarP(&flagLightDuration, `duration`, `d`, 0*time.Second, `duration of the color transition`)
 	cmdLightColor.MarkFlagRequired(`hue`)
 	cmdLightColor.MarkFlagRequired(`saturation`)
 	cmdLightColor.MarkFlagRequired(`brightness`)
@@ -71,6 +70,7 @@ func init() {
 
 	cmdLight.PersistentFlags().IntSliceVarP(&flagLightIDs, `id`, `i`, make([]int, 0), `ID of the light(s) to manage, comma-seprated.  Defaults to all lights`)
 	cmdLight.PersistentFlags().StringSliceVarP(&flagLightLabels, `label`, `l`, make([]string, 0), `label of the light(s) to manage, comma-separated.  Defaults to all lights.`)
+	cmdLight.PersistentFlags().DurationVarP(&flagLightDuration, `duration`, `d`, 0*time.Second, `duration of the power/color transition`)
 }
 
 func lightList(c *cobra.Command, args []string) {
@@ -178,10 +178,10 @@ func lightPower(c *cobra.Command, args []string) {
 
 	if len(lights) > 0 {
 		for _, light := range lights {
-			light.SetPower(state)
+			light.SetPowerDuration(state, flagLightDuration)
 		}
 	} else {
-		client.SetPower(state)
+		client.SetPowerDuration(state, flagLightDuration)
 	}
 }
 
