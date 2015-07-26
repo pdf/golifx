@@ -166,6 +166,12 @@ func (p *V2) getDevice(id uint64) (device.GenericDevice, error) {
 
 func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 	common.Log.Debugf("Processing packet from %v: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", addr.IP, pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+	if pkt.Target != 0 {
+		dev, err := p.getDevice(pkt.Target)
+		if err == nil {
+			dev.SetSeen(time.Now())
+		}
+	}
 	if pkt.GetSource() != packet.ClientID {
 		switch pkt.GetType() {
 		case device.StatePower:
