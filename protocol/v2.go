@@ -213,12 +213,14 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 	}
 	switch pkt.GetType() {
 	case device.StateService:
-		dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, pkt)
-		if err != nil {
-			common.Log.Errorf("Failed creating device: %v\n", err)
-			return
+		if _, err := p.getDevice(pkt.Target); err != nil {
+			dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, pkt)
+			if err != nil {
+				common.Log.Errorf("Failed creating device: %v\n", err)
+				return
+			}
+			p.addDevice(dev)
 		}
-		p.addDevice(dev)
 	default:
 		if pkt.GetTarget() == 0 {
 			common.Log.Debugf("Skipping packet without target: %+v\n", *pkt)
