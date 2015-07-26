@@ -6,7 +6,7 @@ but the V2 protocol implementation needs documentation and testing.
 If you have Go installed, you can install the `lifx` CLI application like so:
 
 ```shell
-go get github.com/pdf/golifx/cmd/lifx
+go get -u github.com/pdf/golifx/cmd/lifx
 ```
 
 The `lifx` command will be available at `${GOPATH}/bin/lifx`
@@ -207,3 +207,213 @@ func (c *Client) SetTimeout(timeout time.Duration)
 SetTimeout sets the time that client operations wait for results before
 returning an error. The special value of 0 may be set to disable timeouts, and
 all operations will wait indefinitely, but this is not recommended.
+
+# common
+--
+    import "github.com/pdf/golifx/common"
+
+Package common contains common elements for the golifx client and protocols
+
+## Usage
+
+```go
+const (
+	// DefaultTimeout is the default duration after which operations time out
+	DefaultTimeout = 2 * time.Second
+	// DefaultRetryInterval is the default interval at which operations are
+	// retried
+	DefaultRetryInterval = 500 * time.Millisecond
+)
+```
+
+```go
+var (
+	// ErrNotFound not found
+	ErrNotFound = errors.New(`Not found`)
+	// ErrProtocol protocol error
+	ErrProtocol = errors.New(`Protocol error`)
+	// ErrDuplicate already exists
+	ErrDuplicate = errors.New(`Already exists`)
+	// ErrInvalidArgument invalid argument
+	ErrInvalidArgument = errors.New(`Invalid argument`)
+	// ErrClosed connection closed
+	ErrClosed = errors.New(`Connection closed`)
+	// ErrTimeout timed out
+	ErrTimeout = errors.New(`Timed out`)
+	// ErrDeviceInvalidType invalid device type
+	ErrDeviceInvalidType = errors.New(`Invalid device type`)
+)
+```
+
+#### func  SetLogger
+
+```go
+func SetLogger(logger Logger)
+```
+SetLogger wraps the supplied logger with a logPrefixer to denote golifx logs
+
+#### type Client
+
+```go
+type Client interface {
+	AddDevice(Device) error
+	RemoveDeviceByID(uint64) error
+	GetTimeout() *time.Duration
+	GetRetryInterval() *time.Duration
+}
+```
+
+Client defines the interface required by protocols
+
+#### type Color
+
+```go
+type Color struct {
+	Hue        uint16 // range 0 to 65535
+	Saturation uint16 // range 0 to 65535
+	Brightness uint16 // range 0 to 65535
+	Kelvin     uint16 // range 2500° (warm) to 9000° (cool)
+}
+```
+
+Color is used to represent the color and color temperature of a light. The color
+is represented as an HSB (Hue, Saturation, Brightness) value. The color
+temperature is represented in K (Kelvin) and is used to adjust the warmness /
+coolness of a white light, which is most obvious when saturation is close zero.
+
+#### type Device
+
+```go
+type Device interface {
+	// Returns the ID for the device
+	ID() uint64
+
+	// Returns the label for the device
+	GetLabel() (string, error)
+	// Sets the label for the device
+	SetLabel(label string) error
+
+	// Returns the power state of the device, true for on, false for off
+	GetPower() (bool, error)
+	// Sets the power state of the device, true for on, false for off
+	SetPower(state bool) error
+}
+```
+
+Device represents a generic LIFX device
+
+#### type ErrNotImplemented
+
+```go
+type ErrNotImplemented struct {
+	Method string
+}
+```
+
+ErrNotImplemented not implemented
+
+#### func (*ErrNotImplemented) Error
+
+```go
+func (e *ErrNotImplemented) Error() string
+```
+Error satisfies the error interface
+
+#### type Light
+
+```go
+type Light interface {
+	// A light is a superset of the Device interface
+	Device
+	// SetColor changes the color of the light, transitioning over the specified
+	// duration
+	SetColor(color Color, duration time.Duration) error
+	// GetColor returns the current color of the light
+	GetColor() (Color, error)
+	// SetPowerDuration sets the power of the light, transitioning over the
+	// speficied duration, state is true for on, false for off.
+	SetPowerDuration(state bool, duration time.Duration) error
+}
+```
+
+Light represents a LIFX light device
+
+#### type Logger
+
+```go
+type Logger interface {
+	// Debugf handles debug level messages
+	Debugf(format string, args ...interface{})
+	// Infof handles info level messages
+	Infof(format string, args ...interface{})
+	// Warnf handles warn level messages
+	Warnf(format string, args ...interface{})
+	// Errorf handles error level messages
+	Errorf(format string, args ...interface{})
+	// Fatalf handles fatal level messages, and must exit the application
+	Fatalf(format string, args ...interface{})
+	// Panicf handles debug level messages, and must panic the application
+	Panicf(format string, args ...interface{})
+}
+```
+
+Logger represents a minimal levelled logger
+
+```go
+var (
+	// Log holds the global logger used by golifx, can be set via SetLogger() in
+	// the golifx package
+	Log Logger
+)
+```
+
+#### type StubLogger
+
+```go
+type StubLogger struct{}
+```
+
+StubLogger satisfies the Logger interface, and simply does nothing with received
+messages
+
+#### func (*StubLogger) Debugf
+
+```go
+func (l *StubLogger) Debugf(format string, args ...interface{})
+```
+Debugf handles debug level messages
+
+#### func (*StubLogger) Errorf
+
+```go
+func (l *StubLogger) Errorf(format string, args ...interface{})
+```
+Errorf handles error level messages
+
+#### func (*StubLogger) Fatalf
+
+```go
+func (l *StubLogger) Fatalf(format string, args ...interface{})
+```
+Fatalf handles fatal level messages, exits the application
+
+#### func (*StubLogger) Infof
+
+```go
+func (l *StubLogger) Infof(format string, args ...interface{})
+```
+Infof handles info level messages
+
+#### func (*StubLogger) Panicf
+
+```go
+func (l *StubLogger) Panicf(format string, args ...interface{})
+```
+Panicf handles debug level messages, and panics the application
+
+#### func (*StubLogger) Warnf
+
+```go
+func (l *StubLogger) Warnf(format string, args ...interface{})
+```
+Warnf handles warn level messages
