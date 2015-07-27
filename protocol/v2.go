@@ -220,13 +220,21 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 	}
 	switch pkt.GetType() {
 	case device.StateService:
-		if _, err := p.getDevice(pkt.Target); err != nil {
+		dev, err := p.getDevice(pkt.Target)
+		if err != nil {
 			dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, pkt)
 			if err != nil {
 				common.Log.Errorf("Failed creating device: %v\n", err)
 				return
 			}
 			p.addDevice(dev)
+			return
+		}
+		// Perform state discovery on lights
+		if l, ok := dev.(*device.Light); ok {
+			if err := l.Get(); err != nil {
+				common.Log.Debugf("Failed getting light state: %v\n", err)
+			}
 		}
 	default:
 		if pkt.GetTarget() == 0 {
