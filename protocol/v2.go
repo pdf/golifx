@@ -136,6 +136,7 @@ func (p *V2) dispatcher() {
 					common.Log.Errorf("Failed closing device '%v': %v\n", dev.ID(), err)
 				}
 			}
+			p.socket.Close()
 			p.Unlock()
 			return
 		default:
