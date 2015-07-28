@@ -88,7 +88,7 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
-		timeout = make(<-chan time.Time, 1)
+		timeout = make(<-chan time.Time)
 	}
 	for {
 		select {
@@ -114,7 +114,7 @@ func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
-		timeout = make(<-chan time.Time, 1)
+		timeout = make(<-chan time.Time)
 	}
 	for {
 		select {
@@ -164,7 +164,7 @@ func (c *Client) GetLightByID(id uint64) (light common.Light, err error) {
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
-		timeout = make(<-chan time.Time, 1)
+		timeout = make(<-chan time.Time)
 	}
 	for {
 		select {
@@ -198,7 +198,7 @@ func (c *Client) GetLightByLabel(label string) (light common.Light, err error) {
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
-		timeout = make(<-chan time.Time, 1)
+		timeout = make(<-chan time.Time)
 	}
 	for {
 		select {

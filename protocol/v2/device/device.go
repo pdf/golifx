@@ -323,7 +323,7 @@ func (d *Device) ResetLimiter() {
 }
 
 func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (packet.Chan, error) {
-	proxyChan := make(packet.Chan, 1)
+	proxyChan := make(packet.Chan)
 
 	// Rate limiter
 	<-d.limiter.C
@@ -340,7 +340,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 			pkt.SetResRequired(true)
 		}
 		if ackRequired || responseRequired {
-			inputChan := make(packet.Chan, 1)
+			inputChan := make(packet.Chan)
 
 			d.Lock()
 			d.sequence++
@@ -356,7 +356,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 				pktResponse := packet.Response{}
 				tick := time.Tick(*d.retryInterval)
 				if d.timeout == nil || *d.timeout == 0 {
-					timeout = make(<-chan time.Time, 1)
+					timeout = make(<-chan time.Time)
 				} else {
 					timeout = time.After(*d.timeout)
 				}
