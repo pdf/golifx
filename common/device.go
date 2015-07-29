@@ -4,6 +4,7 @@ import "time"
 
 // Device represents a generic LIFX device
 type Device interface {
+	SubscriptionTarget
 	// Returns the ID for the device
 	ID() uint64
 
@@ -11,7 +12,6 @@ type Device interface {
 	GetLabel() (string, error)
 	// Sets the label for the device
 	SetLabel(label string) error
-
 	// Returns the power state of the device, true for on, false for off
 	GetPower() (bool, error)
 	// Sets the power state of the device, true for on, false for off

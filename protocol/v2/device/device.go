@@ -68,6 +68,7 @@ type Device struct {
 	requestSocket *net.UDPConn
 	responseMap   responseMap
 	responseInput packet.Chan
+	subscriptions map[string]*common.Subscription
 	quitChan      chan bool
 	timeout       *time.Duration
 	retryInterval *time.Duration
@@ -118,13 +119,42 @@ func (d *Device) Discover() error {
 	return nil
 }
 
+// NewSubscription returns a new *common.Subscription for receiving events from
+// this device.
+func (d *Device) NewSubscription() (*common.Subscription, error) {
+	sub := common.NewSubscription(d)
+	d.Lock()
+	d.subscriptions[sub.ID()] = sub
+	d.Unlock()
+	return sub, nil
+}
+
+// CloseSubscription is a callback for handling the closing of subscriptions.
+func (d *Device) CloseSubscription(sub *common.Subscription) error {
+	d.RLock()
+	_, ok := d.subscriptions[sub.ID()]
+	d.RUnlock()
+	if !ok {
+		return common.ErrNotFound
+	}
+	d.Lock()
+	delete(d.subscriptions, sub.ID())
+	d.Unlock()
+
+	return nil
+}
+
 func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	l := stateLabel{}
 	if err := pkt.DecodePayload(&l); err != nil {
 		return err
 	}
-	d.label = stripNull(string(l.Label[:]))
 	common.Log.Debugf("Got label (%v): %+v\n", d.id, d.label)
+	newLabel := stripNull(string(l.Label[:]))
+	if newLabel != d.label {
+		d.label = newLabel
+		d.publish(common.EventUpdateLabel{Label: d.label})
+	}
 
 	return nil
 }
@@ -156,6 +186,10 @@ func (d *Device) GetLabel() (string, error) {
 }
 
 func (d *Device) SetLabel(label string) error {
+	if d.label == label {
+		return nil
+	}
+
 	p := new(payloadLabel)
 	copy(p.Label[:], label)
 
@@ -169,6 +203,7 @@ func (d *Device) SetLabel(label string) error {
 	}
 
 	d.label = label
+	d.publish(common.EventUpdateLabel{Label: d.label})
 	return nil
 }
 
@@ -177,14 +212,17 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&p); err != nil {
 		return err
 	}
-	d.power = p.Level
 	common.Log.Debugf("Got power (%v): %+v\n", d.id, d.power)
+
+	if d.power != p.Level {
+		d.power = p.Level
+		d.publish(common.EventUpdatePower{Power: d.power > 0})
+	}
 
 	return nil
 }
 
 func (d *Device) GetPower() (bool, error) {
-	//TODO: RPC
 	if d.power != 0 {
 		return true, nil
 	}
@@ -206,14 +244,14 @@ func (d *Device) GetPower() (bool, error) {
 		return false, err
 	}
 
-	if d.power == 0 {
-		return false, nil
-	} else {
-		return true, nil
-	}
+	return d.power > 0, nil
 }
 
 func (d *Device) SetPower(state bool) error {
+	if state && d.power > 0 {
+		return nil
+	}
+
 	p := new(payloadPower)
 	if state {
 		p.Level = math.MaxUint16
@@ -229,6 +267,7 @@ func (d *Device) SetPower(state bool) error {
 	}
 
 	d.power = p.Level
+	d.publish(common.EventUpdatePower{Power: d.power > 0})
 	return nil
 }
 
@@ -284,34 +323,6 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 
 func (d *Device) Handle(pkt *packet.Packet) {
 	d.responseInput <- packet.Response{Result: *pkt}
-}
-
-func (d *Device) handler() {
-	var pktResponse packet.Response
-	for {
-		select {
-		case <-d.quitChan:
-			// Re-populate the quitChan for other routines
-			d.quitChan <- true
-			return
-		case pktResponse = <-d.responseInput:
-			common.Log.Debugf("Handling packet on device %v: %+v\n", d.id, pktResponse)
-			seq := pktResponse.Result.GetSequence()
-			d.RLock()
-			ch, ok := d.responseMap[seq]
-			d.RUnlock()
-			if !ok {
-				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v\n", seq, d.id, pktResponse)
-				continue
-			}
-			common.Log.Debugf("Returning packet to caller on device %v: %+v\n", d.id, pktResponse)
-			ch <- pktResponse
-			d.Lock()
-			close(ch)
-			delete(d.responseMap, seq)
-			d.Unlock()
-		}
-	}
 }
 
 func (d *Device) GetAddress() *net.UDPAddr {
@@ -409,12 +420,59 @@ func (d *Device) Close() error {
 	return nil
 }
 
+func (d *Device) handler() {
+	var pktResponse packet.Response
+	for {
+		select {
+		case <-d.quitChan:
+			// Re-populate the quitChan for other routines
+			d.quitChan <- true
+			return
+		case pktResponse = <-d.responseInput:
+			common.Log.Debugf("Handling packet on device %v: %+v\n", d.id, pktResponse)
+			seq := pktResponse.Result.GetSequence()
+			d.RLock()
+			ch, ok := d.responseMap[seq]
+			d.RUnlock()
+			if !ok {
+				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v\n", seq, d.id, pktResponse)
+				continue
+			}
+			common.Log.Debugf("Returning packet to caller on device %v: %+v\n", d.id, pktResponse)
+			ch <- pktResponse
+			d.Lock()
+			close(ch)
+			delete(d.responseMap, seq)
+			d.Unlock()
+		}
+	}
+}
+
+// Pushes an event to subscribers
+func (d *Device) publish(event interface{}) error {
+	d.RLock()
+	subs := make(map[string]*common.Subscription, len(d.subscriptions))
+	for k, sub := range d.subscriptions {
+		subs[k] = sub
+	}
+	d.RUnlock()
+
+	for _, sub := range subs {
+		if err := sub.Write(event); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, pkt *packet.Packet) (*Device, error) {
 	d := &Device{
 		address:       addr,
 		requestSocket: requestSocket,
 		responseMap:   make(responseMap),
 		responseInput: make(packet.Chan, 32),
+		subscriptions: make(map[string]*common.Subscription),
 		quitChan:      make(chan bool),
 		timeout:       timeout,
 		retryInterval: retryInterval,

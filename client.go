@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/pdf/golifx/common"
-	"github.com/pdf/golifx/protocol"
 )
 
 // Client provides a simple interface for interacting with LIFX devices.  Client
@@ -14,18 +13,18 @@ import (
 type Client struct {
 	discoveryInterval     time.Duration
 	quitChan              chan bool
-	protocol              protocol.Protocol
+	protocol              common.Protocol
 	timeout               time.Duration
 	retryInterval         time.Duration
 	internalRetryInterval time.Duration
 	devices               map[uint64]common.Device
+	subscriptions         map[string]*common.Subscription
 	sync.RWMutex
 }
 
-// AddDevice is for use by protocols only.
-// Adds dev to the client's known devices, and returns dev.  Returns
+// addDevice adds dev to the client's known devices, and returns dev.  Returns
 // common.ErrDuplicate if the device is already known.
-func (c *Client) AddDevice(dev common.Device) error {
+func (c *Client) addDevice(dev common.Device) error {
 	id := dev.ID()
 	c.RLock()
 	_, ok := c.devices[id]
@@ -38,16 +37,20 @@ func (c *Client) AddDevice(dev common.Device) error {
 	c.devices[id] = dev
 	c.Unlock()
 
+	err := c.publish(common.EventNewDevice{Device: dev})
+	if err != nil {
+		common.Log.Warnf("Failed publishing event: %v\n", err)
+	}
+
 	return nil
 }
 
-// RemoveDeviceByID is for use by protocols only.
-// Looks up a device by it's id and removes it from the client's list of known
-// devices, or returns common.ErrNotFound if the device is not known at this
-// time.
-func (c *Client) RemoveDeviceByID(id uint64) error {
+// removeDeviceByID looks up a device by it's id and removes it from the
+// client's list of known devices, or returns common.ErrNotFound if the device
+// is not known at this time.
+func (c *Client) removeDeviceByID(id uint64) error {
 	c.RLock()
-	_, ok := c.devices[id]
+	dev, ok := c.devices[id]
 	c.RUnlock()
 	if !ok {
 		return common.ErrNotFound
@@ -56,6 +59,11 @@ func (c *Client) RemoveDeviceByID(id uint64) error {
 	c.Lock()
 	delete(c.devices, id)
 	c.Unlock()
+
+	err := c.publish(common.EventExpiredDevice{Device: dev})
+	if err != nil {
+		common.Log.Warnf("Failed publishing event: %v\n", err)
+	}
 
 	return nil
 }
@@ -83,21 +91,34 @@ func (c *Client) GetDevices() ([]common.Device, error) {
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
+	c.RLock()
+	dev, ok := c.devices[id]
+	c.RUnlock()
+	if ok {
+		return dev, nil
+	}
+
 	var timeout <-chan time.Time
-	tick := time.Tick(c.internalRetryInterval)
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
 		timeout = make(<-chan time.Time)
 	}
+
+	sub, err := c.protocol.NewSubscription()
+	if err != nil {
+		return nil, err
+	}
+	events := sub.Events()
+
 	for {
 		select {
-		case <-tick:
-			c.RLock()
-			dev, ok := c.devices[id]
-			c.RUnlock()
-			if ok {
-				return dev, nil
+		case event := <-events:
+			switch event := event.(type) {
+			case common.EventNewDevice:
+				if event.Device.ID() == id {
+					return event.Device, nil
+				}
 			}
 		case <-timeout:
 			return nil, common.ErrNotFound
@@ -109,21 +130,38 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
+	devices, _ := c.GetDevices()
+	for _, dev := range devices {
+		res, err := dev.GetLabel()
+		if err == nil && res == label {
+			return dev, nil
+		}
+	}
+
 	var timeout <-chan time.Time
-	tick := time.Tick(c.internalRetryInterval)
 	if c.timeout > 0 {
 		timeout = time.After(c.timeout)
 	} else {
 		timeout = make(<-chan time.Time)
 	}
+
+	sub, err := c.protocol.NewSubscription()
+	if err != nil {
+		return nil, err
+	}
+	events := sub.Events()
+
 	for {
 		select {
-		case <-tick:
-			devices, _ := c.GetDevices()
-			for _, dev := range devices {
-				res, err := dev.GetLabel()
-				if err == nil && res == label {
-					return dev, nil
+		case event := <-events:
+			switch event := event.(type) {
+			case common.EventNewDevice:
+				l, err := event.Device.GetLabel()
+				if err != nil {
+					return nil, err
+				}
+				if l == label {
+					return event.Device, nil
 				}
 			}
 		case <-timeout:
@@ -158,67 +196,35 @@ func (c *Client) GetLights() (lights []common.Light, err error) {
 // the light, or common.ErrDeviceInvalidType if the device exists but is not a
 // light.
 func (c *Client) GetLightByID(id uint64) (light common.Light, err error) {
-	var ok bool
-	var timeout <-chan time.Time
-	tick := time.Tick(c.internalRetryInterval)
-	if c.timeout > 0 {
-		timeout = time.After(c.timeout)
-	} else {
-		timeout = make(<-chan time.Time)
+	dev, err := c.GetDeviceByID(id)
+	if err != nil {
+		return nil, err
 	}
-	for {
-		select {
-		case <-tick:
-			dev, err := c.GetDeviceByID(id)
-			if err == nil {
-				if light, ok = dev.(common.Light); !ok {
-					err = common.ErrDeviceInvalidType
-				}
-			}
-			if err != common.ErrDeviceInvalidType {
-				return light, err
-			}
-		case <-timeout:
-			if err == nil {
-				return nil, common.ErrNotFound
-			}
-			return nil, err
-		}
+
+	light, ok := dev.(common.Light)
+	if !ok {
+		return nil, common.ErrDeviceInvalidType
 	}
+
+	return light, nil
 }
 
 // GetLightByLabel looks up a light by it's label and returns a common.Light.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the light, or common.ErrDeviceInvalidType if the device exists but is not a
 // light.
-func (c *Client) GetLightByLabel(label string) (light common.Light, err error) {
-	var ok bool
-	var timeout <-chan time.Time
-	tick := time.Tick(c.internalRetryInterval)
-	if c.timeout > 0 {
-		timeout = time.After(c.timeout)
-	} else {
-		timeout = make(<-chan time.Time)
+func (c *Client) GetLightByLabel(label string) (common.Light, error) {
+	dev, err := c.GetDeviceByLabel(label)
+	if err != nil {
+		return nil, err
 	}
-	for {
-		select {
-		case <-tick:
-			dev, err := c.GetDeviceByLabel(label)
-			if err == nil {
-				if light, ok = dev.(common.Light); !ok {
-					err = common.ErrDeviceInvalidType
-				}
-			}
-			if err != common.ErrDeviceInvalidType {
-				return light, err
-			}
-		case <-timeout:
-			if err == nil {
-				return nil, common.ErrNotFound
-			}
-			return nil, err
-		}
+
+	light, ok := dev.(common.Light)
+	if !ok {
+		return nil, common.ErrDeviceInvalidType
 	}
+
+	return light, nil
 }
 
 // SetPower broadcasts a request to change the power state of all devices on
@@ -249,7 +255,9 @@ func (c *Client) SetColor(color common.Color, duration time.Duration) error {
 func (c *Client) SetDiscoveryInterval(interval time.Duration) error {
 	c.Lock()
 	if c.discoveryInterval != 0 {
-		c.quitChan <- true
+		for i := 0; i < len(c.quitChan); i++ {
+			c.quitChan <- true
+		}
 	}
 	c.discoveryInterval = interval
 	c.Unlock()
@@ -286,15 +294,97 @@ func (c *Client) GetRetryInterval() *time.Duration {
 	return &c.retryInterval
 }
 
+// NewSubscription returns a new *common.Subscription for receiving events from
+// this client.
+func (c *Client) NewSubscription() (*common.Subscription, error) {
+	sub := common.NewSubscription(c)
+	c.Lock()
+	c.subscriptions[sub.ID()] = sub
+	c.Unlock()
+	return sub, nil
+}
+
+// CloseSubscription is a callback for handling the closing of subscriptions.
+func (c *Client) CloseSubscription(sub *common.Subscription) error {
+	c.RLock()
+	_, ok := c.subscriptions[sub.ID()]
+	c.RUnlock()
+	if !ok {
+		return common.ErrNotFound
+	}
+	c.Lock()
+	delete(c.subscriptions, sub.ID())
+	c.Unlock()
+
+	return nil
+}
+
 // Close signals the termination of this client, and cleans up resources
 func (c *Client) Close() error {
+	for _, sub := range c.subscriptions {
+		sub.Close()
+	}
 	c.Lock()
 	defer c.Unlock()
 	c.quitChan <- true
 	return c.protocol.Close()
 }
 
+// Pushes an event to subscribers
+func (c *Client) publish(event interface{}) error {
+	c.RLock()
+	subs := make(map[string]*common.Subscription, len(c.subscriptions))
+	for k, sub := range c.subscriptions {
+		subs[k] = sub
+	}
+	c.RUnlock()
+
+	for _, sub := range subs {
+		if err := sub.Write(event); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) subscribe() error {
+	sub, err := c.protocol.NewSubscription()
+	if err != nil {
+		return err
+	}
+	events := sub.Events()
+	go func() {
+		for {
+			select {
+			case <-c.quitChan:
+				sub.Close()
+				return
+			case event := <-events:
+				switch event := event.(type) {
+				case common.EventNewDevice:
+					if err := c.addDevice(event.Device); err != nil {
+						common.Log.Debugf("Could not add device to client: %v\n", err)
+					}
+				case common.EventExpiredDevice:
+					if err := c.removeDeviceByID(event.Device.ID()); err != nil {
+						common.Log.Debugf("Could not remove device from client: %v\n", err)
+					}
+				default:
+					common.Log.Debugf("Unhandled event on client: %+v\n", event)
+					continue
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (c *Client) discover() error {
+	if err := c.subscribe(); err != nil {
+		return err
+	}
 	if c.discoveryInterval == 0 {
 		common.Log.Debugf("Discovery interval is zero, discovery will only be performed once")
 		return c.protocol.Discover()

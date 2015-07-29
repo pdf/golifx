@@ -9,31 +9,37 @@
 //
 // Also included in cmd/lifx is a small CLI utility that allows interacting with
 // your LIFX devices on the LAN.
+//
+// In various parts of this package you may find references to a Device or a
+// Light.  The LIFX protocol makes room for future non-light devices by making a
+// light a superset of a device, so a Light is a Device, but a Device is not
+// necessarily a Light.  At this stage, LIFX only produces lights though, so
+// they are the only type of device you will interact with.
 package golifx
 
 import (
 	"time"
 
 	"github.com/pdf/golifx/common"
-	"github.com/pdf/golifx/protocol"
 )
 
 const (
 	// VERSION of this library
-	VERSION = `0.0.4`
+	VERSION = `0.1.0`
 )
 
 // NewClient returns a pointer to a new Client and any error that occurred
 // initializing the client, using the protocol p.  It also kicks off a discovery
 // run.
-func NewClient(p protocol.Protocol) (*Client, error) {
+func NewClient(p common.Protocol) (*Client, error) {
 	c := &Client{
 		protocol:              p,
 		devices:               make(map[uint64]common.Device),
+		subscriptions:         make(map[string]*common.Subscription),
 		timeout:               common.DefaultTimeout,
 		retryInterval:         common.DefaultRetryInterval,
 		internalRetryInterval: 10 * time.Millisecond,
-		quitChan:              make(chan bool, 1),
+		quitChan:              make(chan bool, 2),
 	}
 	p.SetClient(c)
 	err := c.discover()

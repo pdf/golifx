@@ -50,9 +50,19 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 	}
 	common.Log.Debugf("Got light state (%v): %+v\n", l.id, s)
 
-	l.color = s.Color
-	l.power = s.Power
-	l.label = stripNull(string(s.Label[:]))
+	if l.color != s.Color {
+		l.color = s.Color
+		l.publish(common.EventUpdateColor{Color: l.color})
+	}
+	if l.power != s.Power {
+		l.power = s.Power
+		l.publish(common.EventUpdatePower{Power: l.power > 0})
+	}
+	newLabel := stripNull(string(s.Label[:]))
+	if newLabel != l.label {
+		l.label = newLabel
+		l.publish(common.EventUpdateLabel{Label: l.label})
+	}
 
 	return nil
 }
@@ -83,6 +93,7 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 	if l.color == color {
 		return nil
 	}
+
 	if duration < shared.RateLimit {
 		duration = shared.RateLimit
 	}
@@ -99,6 +110,8 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 		return err
 	}
 	l.color = color
+	l.publish(common.EventUpdateColor{Color: l.color})
+
 	return nil
 }
 
@@ -107,6 +120,10 @@ func (l *Light) GetColor() (common.Color, error) {
 }
 
 func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
+	if state && l.power > 0 {
+		return nil
+	}
+
 	p := new(payloadPowerDuration)
 	if state {
 		p.Level = math.MaxUint16
@@ -123,6 +140,7 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	}
 
 	l.power = p.Level
+	l.publish(common.EventUpdatePower{Power: l.power > 0})
 
 	return nil
 }

@@ -23,40 +23,93 @@ type V2 struct {
 	broadcast     *device.Light
 	lastDiscovery time.Time
 	devices       map[uint64]device.GenericDevice
+	subscriptions map[string]*common.Subscription
 	quitChan      chan bool
 	sync.RWMutex
 }
 
 // SetClient sets the client on the protocol for bi-directional communication
 func (p *V2) SetClient(client common.Client) {
-	p.client = client
 	p.timeout = client.GetTimeout()
 	p.retryInterval = client.GetRetryInterval()
 }
 
+// NewSubscription returns a new *common.Subscription for receiving events from
+// this protocol.
+func (p *V2) NewSubscription() (*common.Subscription, error) {
+	if err := p.init(); err != nil {
+		return nil, err
+	}
+	sub := common.NewSubscription(p)
+	p.Lock()
+	p.subscriptions[sub.ID()] = sub
+	p.Unlock()
+	return sub, nil
+}
+
+// CloseSubscription is a callback for handling the closing of subscriptions.
+func (p *V2) CloseSubscription(sub *common.Subscription) error {
+	p.RLock()
+	_, ok := p.subscriptions[sub.ID()]
+	p.RUnlock()
+	if !ok {
+		return common.ErrNotFound
+	}
+	p.Lock()
+	delete(p.subscriptions, sub.ID())
+	p.Unlock()
+
+	return nil
+}
+
 func (p *V2) init() error {
+	p.RLock()
+	if p.initialized {
+		p.RUnlock()
+		return nil
+	}
+	p.RUnlock()
+
 	p.Lock()
 	defer p.Unlock()
-	if !p.initialized {
-		socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{Port: shared.DefaultPort})
-		if err != nil {
-			return err
-		}
-		p.socket = socket
-		addr := net.UDPAddr{
-			IP:   net.IPv4(255, 255, 255, 255),
-			Port: shared.DefaultPort,
-		}
-		dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, nil)
-		if err != nil {
-			return err
-		}
-		p.broadcast = &device.Light{Device: *dev}
-		p.devices = make(map[uint64]device.GenericDevice)
-		p.quitChan = make(chan bool, 1)
-		go p.dispatcher()
-		p.initialized = true
+	socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{Port: shared.DefaultPort})
+	if err != nil {
+		return err
 	}
+	p.socket = socket
+	addr := net.UDPAddr{
+		IP:   net.IPv4(255, 255, 255, 255),
+		Port: shared.DefaultPort,
+	}
+	dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, nil)
+	if err != nil {
+		return err
+	}
+	p.broadcast = &device.Light{Device: *dev}
+	p.devices = make(map[uint64]device.GenericDevice)
+	p.subscriptions = make(map[string]*common.Subscription)
+	p.quitChan = make(chan bool, 1)
+	go p.dispatcher()
+	p.initialized = true
+
+	return nil
+}
+
+// Pushes an event to subscribers
+func (p *V2) publish(event interface{}) error {
+	p.RLock()
+	subs := make(map[string]*common.Subscription, len(p.subscriptions))
+	for k, sub := range p.subscriptions {
+		subs[k] = sub
+	}
+	p.RUnlock()
+
+	for _, sub := range subs {
+		if err := sub.Write(event); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -64,33 +117,28 @@ func (p *V2) init() error {
 // protocol versions.  This is called immediately when the client connects to
 // the protocol
 func (p *V2) Discover() error {
-	p.RLock()
-	initialized := p.initialized
-	p.RUnlock()
-	if !initialized {
-		if err := p.init(); err != nil {
-			return err
-		}
+	if err := p.init(); err != nil {
+		return err
 	}
 	if p.lastDiscovery.After(time.Time{}) {
-		var extinct []uint64
+		var extinct []device.GenericDevice
 		p.RLock()
 		for _, dev := range p.devices {
 			// If the device has not been seen in twice the time since the last
 			// discovery, mark it as extinct
 			if dev.Seen().Before(time.Now().Add(time.Now().Sub(p.lastDiscovery) * -2)) {
-				extinct = append(extinct, dev.ID())
+				extinct = append(extinct, dev)
 			}
 		}
 		p.RUnlock()
 		// Remove extinct devices
-		for _, id := range extinct {
+		for _, dev := range extinct {
 			p.Lock()
-			delete(p.devices, id)
+			delete(p.devices, dev.ID())
 			p.Unlock()
-			err := p.client.RemoveDeviceByID(id)
+			err := p.publish(common.EventExpiredDevice{Device: dev})
 			if err != nil {
-				common.Log.Warnf("Failed removing extinct device '%d' from client: %v", id, err)
+				common.Log.Warnf("Failed removing extinct device '%d' from client: %v", dev.ID(), err)
 			}
 		}
 	}
@@ -282,22 +330,14 @@ func (p *V2) addDevice(dev *device.Device) {
 			common.Log.Debugf("Failed getting light state: %v\n", err)
 		}
 		common.Log.Debugf("Adding device to client: %v\n", l.ID())
-		if err := p.client.AddDevice(l); err != nil {
-			if err == common.ErrDuplicate {
-				common.Log.Debugf("Device exists on client: %v\n", l.ID())
-			} else {
-				common.Log.Errorf("Error adding device to client: %v\n", err)
-			}
+		if err := p.publish(common.EventNewDevice{Device: l}); err != nil {
+			common.Log.Errorf("Error adding device to client: %v\n", err)
 			return
 		}
 	} else {
 		common.Log.Debugf("Adding device to client: %v\n", dev.ID())
-		if err := p.client.AddDevice(dev); err != nil {
-			if err == common.ErrDuplicate {
-				common.Log.Debugf("Device exists on client: %v\n", dev.ID())
-			} else {
-				common.Log.Errorf("Error adding device to client: %v\n", err)
-			}
+		if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
+			common.Log.Errorf("Error adding device to client: %v\n", err)
 			return
 		}
 	}

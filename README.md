@@ -22,12 +22,18 @@ Based on the protocol documentation available at: http://lan.developer.lifx.com/
 Also included in cmd/lifx is a small CLI utility that allows interacting with
 your LIFX devices on the LAN.
 
+In various parts of this package you may find references to a Device or a Light.
+The LIFX protocol makes room for future non-light devices by making a light a
+superset of a device, so a Light is a Device, but a Device is not necessarily a
+Light. At this stage, LIFX only produces lights though, so they are the only
+type of device you will interact with.
+
 ## Usage
 
 ```go
 const (
 	// VERSION of this library
-	VERSION = `0.0.1`
+	VERSION = `0.1.0`
 )
 ```
 
@@ -56,19 +62,11 @@ obtain a Client instance.
 #### func  NewClient
 
 ```go
-func NewClient(p protocol.Protocol) (*Client, error)
+func NewClient(p common.Protocol) (*Client, error)
 ```
 NewClient returns a pointer to a new Client and any error that occurred
 initializing the client, using the protocol p. It also kicks off a discovery
 run.
-
-#### func (*Client) AddDevice
-
-```go
-func (c *Client) AddDevice(dev common.Device) error
-```
-AddDevice is for use by protocols only. Adds dev to the client's known devices,
-and returns dev. Returns common.ErrDuplicate if the device is already known.
 
 #### func (*Client) Close
 
@@ -76,6 +74,13 @@ and returns dev. Returns common.ErrDuplicate if the device is already known.
 func (c *Client) Close() error
 ```
 Close signals the termination of this client, and cleans up resources
+
+#### func (*Client) CloseSubscription
+
+```go
+func (c *Client) CloseSubscription(sub *common.Subscription) error
+```
+CloseSubscription is a callback for handling the closing of subscriptions.
 
 #### func (*Client) GetDeviceByID
 
@@ -115,7 +120,7 @@ common.ErrDeviceInvalidType if the device exists but is not a light.
 #### func (*Client) GetLightByLabel
 
 ```go
-func (c *Client) GetLightByLabel(label string) (light common.Light, err error)
+func (c *Client) GetLightByLabel(label string) (common.Light, error)
 ```
 GetLightByLabel looks up a light by it's label and returns a common.Light. May
 return a common.ErrNotFound error if the lookup times out without finding the
@@ -145,14 +150,13 @@ func (c *Client) GetTimeout() *time.Duration
 GetTimeout returns the currently configured timeout period for operations on
 this client
 
-#### func (*Client) RemoveDeviceByID
+#### func (*Client) NewSubscription
 
 ```go
-func (c *Client) RemoveDeviceByID(id uint64) error
+func (c *Client) NewSubscription() (*common.Subscription, error)
 ```
-RemoveDeviceByID is for use by protocols only. Looks up a device by it's id and
-removes it from the client's list of known devices, or returns
-common.ErrNotFound if the device is not known at this time.
+NewSubscription returns a new *common.Subscription for receiving events from
+this client.
 
 #### func (*Client) SetColor
 
@@ -207,7 +211,6 @@ func (c *Client) SetTimeout(timeout time.Duration)
 SetTimeout sets the time that client operations wait for results before
 returning an error. The special value of 0 may be set to disable timeouts, and
 all operations will wait indefinitely, but this is not recommended.
-
 # common
 --
     import "github.com/pdf/golifx/common"
@@ -256,8 +259,6 @@ SetLogger wraps the supplied logger with a logPrefixer to denote golifx logs
 
 ```go
 type Client interface {
-	AddDevice(Device) error
-	RemoveDeviceByID(uint64) error
 	GetTimeout() *time.Duration
 	GetRetryInterval() *time.Duration
 }
@@ -285,6 +286,7 @@ coolness of a white light, which is most obvious when saturation is close zero.
 
 ```go
 type Device interface {
+	SubscriptionTarget
 	// Returns the ID for the device
 	ID() uint64
 
@@ -292,7 +294,6 @@ type Device interface {
 	GetLabel() (string, error)
 	// Sets the label for the device
 	SetLabel(label string) error
-
 	// Returns the power state of the device, true for on, false for off
 	GetPower() (bool, error)
 	// Sets the power state of the device, true for on, false for off
@@ -318,6 +319,56 @@ ErrNotImplemented not implemented
 func (e *ErrNotImplemented) Error() string
 ```
 Error satisfies the error interface
+
+#### type EventExpiredDevice
+
+```go
+type EventExpiredDevice struct {
+	Device Device
+}
+```
+
+EventExpiredDevice is emitted by a Client when a Device is no longer known
+
+#### type EventNewDevice
+
+```go
+type EventNewDevice struct {
+	Device Device
+}
+```
+
+EventNewDevice is emitted by a Client when it discovers a new Device
+
+#### type EventUpdateColor
+
+```go
+type EventUpdateColor struct {
+	Color Color
+}
+```
+
+EventUpdateColor is emitted by a Light when it's power state is updated
+
+#### type EventUpdateLabel
+
+```go
+type EventUpdateLabel struct {
+	Label string
+}
+```
+
+EventUpdateLabel is emitted by a Device when it's label is updated
+
+#### type EventUpdatePower
+
+```go
+type EventUpdatePower struct {
+	Power bool
+}
+```
+
+EventUpdatePower is emitted by a Device when it's power state is updated
 
 #### type Light
 
@@ -366,6 +417,35 @@ var (
 	Log Logger
 )
 ```
+
+#### type Protocol
+
+```go
+type Protocol interface {
+	SubscriptionTarget
+	// SetClient sets the client on the protocol for bi-directional
+	// communication
+	SetClient(client Client)
+	// Discover initiates device discovery, this may be a noop in some future
+	// protocol versions.  This is called immediately when the client connects
+	// to the protocol
+	Discover() error
+	// Close closes the protocol driver, no further communication with the
+	// protocol is possible
+	Close() error
+
+	// SetPower sets the power state globally, on all devices
+	SetPower(state bool) error
+	// SetPowerDuration sets the power state globally, on all lights, over the
+	// specified duration
+	SetPowerDuration(state bool, duration time.Duration) error
+	// SetColor changes the color globally, on all lights, over the specified
+	// duration
+	SetColor(color Color, duration time.Duration) error
+}
+```
+
+Protocol defines the interface between the Client and a protocol implementation
 
 #### type StubLogger
 
@@ -417,3 +497,62 @@ Panicf handles debug level messages, and panics the application
 func (l *StubLogger) Warnf(format string, args ...interface{})
 ```
 Warnf handles warn level messages
+
+#### type Subscription
+
+```go
+type Subscription struct {
+}
+```
+
+Subscription exposes an event channel for consumers, and attaches to a
+SubscriptionTarget, that will feed it with events
+
+#### func  NewSubscription
+
+```go
+func NewSubscription(target SubscriptionTarget) *Subscription
+```
+NewSubscription returns a *Subscription attached to the specified target
+
+#### func (*Subscription) Close
+
+```go
+func (s *Subscription) Close()
+```
+Close cleans up resources and notifies the target that the subscription should
+no longer be used. It is important to close subscriptions when you are done with
+them to avoid blocking operations.
+
+#### func (*Subscription) Events
+
+```go
+func (s *Subscription) Events() <-chan interface{}
+```
+Events returns a chan reader for reading events published to this subscription
+
+#### func (*Subscription) ID
+
+```go
+func (s *Subscription) ID() string
+```
+ID returns the unique ID for this subscription
+
+#### func (*Subscription) Write
+
+```go
+func (s *Subscription) Write(event interface{}) error
+```
+Write pushes an event onto the events channel
+
+#### type SubscriptionTarget
+
+```go
+type SubscriptionTarget interface {
+	NewSubscription() (*Subscription, error)
+	CloseSubscription(*Subscription) error
+}
+```
+
+SubscriptionTarget defines the interface between a subscription and it's target
+object
