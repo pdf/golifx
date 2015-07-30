@@ -20,7 +20,7 @@ type EventUpdatePower struct {
 	Power bool
 }
 
-// EventUpdateColor is emitted by a Light when it's power state is updated
+// EventUpdateColor is emitted by a Light when it's Color is updated
 type EventUpdateColor struct {
 	Color Color
 }
