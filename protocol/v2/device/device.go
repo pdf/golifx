@@ -46,6 +46,7 @@ const (
 )
 
 type responseMap map[uint8]packet.Chan
+type doneMap map[uint8]chan bool
 
 type GenericDevice interface {
 	common.Device
@@ -67,6 +68,7 @@ type Device struct {
 	sequence      uint8
 	requestSocket *net.UDPConn
 	responseMap   responseMap
+	doneMap       doneMap
 	responseInput packet.Chan
 	subscriptions map[string]*common.Subscription
 	quitChan      chan bool
@@ -337,15 +339,18 @@ func (d *Device) ResetLimiter() {
 func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (packet.Chan, error) {
 	proxyChan := make(packet.Chan)
 
+	// Rate limiter
+	<-d.limiter.C
+
+	// Reliable forces ack
 	if d.reliable {
 		ackRequired = true
 	}
 
-	// Rate limiter
-	<-d.limiter.C
-
 	// Broadcast vs direct
 	if d.id == 0 {
+		// Broadcast can't be reliable
+		ackRequired = false
 		pkt.SetTagged(true)
 	} else {
 		pkt.SetTarget(d.id)
@@ -357,25 +362,34 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 		}
 		if ackRequired || responseRequired {
 			inputChan := make(packet.Chan)
+			doneChan := make(chan bool)
 
 			d.Lock()
 			d.sequence++
 			if d.sequence == 0 {
 				d.sequence++
 			}
-			d.responseMap[d.sequence] = inputChan
-			pkt.SetSequence(d.sequence)
+			seq := d.sequence
+			d.responseMap[seq] = inputChan
+			d.doneMap[seq] = doneChan
+			pkt.SetSequence(seq)
 			d.Unlock()
 
 			go func() {
+				defer func() {
+					close(doneChan)
+				}()
+
 				var timeout <-chan time.Time
 				pktResponse := packet.Response{}
 				ticker := time.NewTicker(*d.retryInterval)
+
 				if d.timeout == nil || *d.timeout == 0 {
 					timeout = make(<-chan time.Time)
 				} else {
 					timeout = time.After(*d.timeout)
 				}
+
 				for {
 					select {
 					case <-d.quitChan:
@@ -384,12 +398,12 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						return
 					case pktResponse = <-inputChan:
 						if pktResponse.Result.GetType() == Acknowledgement {
-							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", pkt.GetSequence(), d.ID())
+							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", seq, d.ID())
 							ticker.Stop()
-							if responseRequired {
-								continue
+							if !responseRequired {
+								return
 							}
-							return
+							continue
 						}
 						proxyChan <- pktResponse
 						return
@@ -434,8 +448,14 @@ func (d *Device) Close() error {
 }
 
 func (d *Device) handler() {
-	var pktResponse packet.Response
+	var (
+		pktResponse packet.Response
+		ok          bool
+		ch          packet.Chan
+		done        chan bool
+	)
 	for {
+
 		select {
 		case <-d.quitChan:
 			// Re-populate the quitChan for other routines
@@ -445,18 +465,23 @@ func (d *Device) handler() {
 			common.Log.Debugf("Handling packet on device %v: %+v\n", d.id, pktResponse)
 			seq := pktResponse.Result.GetSequence()
 			d.RLock()
-			ch, ok := d.responseMap[seq]
+			ch, ok = d.responseMap[seq]
+			if ok {
+				done, ok = d.doneMap[seq]
+			}
 			d.RUnlock()
 			if !ok {
 				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v\n", seq, d.id, pktResponse)
 				continue
 			}
 			common.Log.Debugf("Returning packet to caller on device %v: %+v\n", d.id, pktResponse)
-			ch <- pktResponse
-			if pktResponse.Result.GetType() != Acknowledgement {
+			select {
+			case ch <- pktResponse:
+			case <-done:
 				d.Lock()
 				close(ch)
 				delete(d.responseMap, seq)
+				delete(d.doneMap, seq)
 				d.Unlock()
 			}
 		}
@@ -486,6 +511,7 @@ func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, 
 		address:       addr,
 		requestSocket: requestSocket,
 		responseMap:   make(responseMap),
+		doneMap:       make(doneMap),
 		responseInput: make(packet.Chan, 32),
 		subscriptions: make(map[string]*common.Subscription),
 		quitChan:      make(chan bool),

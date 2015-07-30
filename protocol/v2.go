@@ -84,11 +84,11 @@ func (p *V2) init() error {
 		IP:   net.IPv4(255, 255, 255, 255),
 		Port: shared.DefaultPort,
 	}
-	dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, p.Reliable, nil)
+	broadcastDev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, false, nil)
 	if err != nil {
 		return err
 	}
-	p.broadcast = &device.Light{Device: *dev}
+	p.broadcast = &device.Light{Device: *broadcastDev}
 	p.devices = make(map[uint64]device.GenericDevice)
 	p.subscriptions = make(map[string]*common.Subscription)
 	p.quitChan = make(chan bool, 1)
@@ -297,6 +297,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 			common.Log.Errorf("No known device with ID %v\n", pkt.GetTarget())
 			return
 		}
+		common.Log.Debugf("Returning packet to device %v: %+v\n", dev.ID(), *pkt)
 		dev.Handle(pkt)
 	}
 }
