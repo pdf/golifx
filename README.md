@@ -211,6 +211,7 @@ func (c *Client) SetTimeout(timeout time.Duration)
 SetTimeout sets the time that client operations wait for results before
 returning an error. The special value of 0 may be set to disable timeouts, and
 all operations will wait indefinitely, but this is not recommended.
+
 # common
 --
     import "github.com/pdf/golifx/common"
@@ -348,7 +349,7 @@ type EventUpdateColor struct {
 }
 ```
 
-EventUpdateColor is emitted by a Light when it's power state is updated
+EventUpdateColor is emitted by a Light when it's Color is updated
 
 #### type EventUpdateLabel
 
