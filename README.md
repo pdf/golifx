@@ -1,7 +1,7 @@
 [![Build Status](https://drone.io/github.com/pdf/golifx/status.png)](https://drone.io/github.com/pdf/golifx/latest) [![GoDoc](https://godoc.org/github.com/pdf/golifx?status.svg)](http://godoc.org/github.com/pdf/golifx) ![License-MIT](http://img.shields.io/badge/license-MIT-red.svg)
 
 __Note:__ This library is at a moderately early stage - everything should work,
-but the V2 protocol implementation needs documentation and testing.
+but the V2 protocol implementation needs documentation and tests.
 
 If you have Go installed, you can install the `lifx` CLI application like so:
 
@@ -33,7 +33,7 @@ type of device you will interact with.
 ```go
 const (
 	// VERSION of this library
-	VERSION = `0.1.0`
+	VERSION = `0.1.1`
 )
 ```
 
@@ -225,7 +225,7 @@ const (
 	DefaultTimeout = 2 * time.Second
 	// DefaultRetryInterval is the default interval at which operations are
 	// retried
-	DefaultRetryInterval = 500 * time.Millisecond
+	DefaultRetryInterval = 100 * time.Millisecond
 )
 ```
 
