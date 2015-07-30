@@ -7,5 +7,5 @@ const (
 	DefaultTimeout = 2 * time.Second
 	// DefaultRetryInterval is the default interval at which operations are
 	// retried
-	DefaultRetryInterval = 500 * time.Millisecond
+	DefaultRetryInterval = 100 * time.Millisecond
 )

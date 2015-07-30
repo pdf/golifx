@@ -74,6 +74,7 @@ type Device struct {
 	retryInterval *time.Duration
 	limiter       *time.Timer
 	seen          time.Time
+	reliable      bool
 	sync.RWMutex
 }
 
@@ -336,6 +337,10 @@ func (d *Device) ResetLimiter() {
 func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (packet.Chan, error) {
 	proxyChan := make(packet.Chan)
 
+	if d.reliable {
+		ackRequired = true
+	}
+
 	// Rate limiter
 	<-d.limiter.C
 
@@ -365,7 +370,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 			go func() {
 				var timeout <-chan time.Time
 				pktResponse := packet.Response{}
-				tick := time.Tick(*d.retryInterval)
+				ticker := time.NewTicker(*d.retryInterval)
 				if d.timeout == nil || *d.timeout == 0 {
 					timeout = make(<-chan time.Time)
 				} else {
@@ -378,9 +383,17 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						d.quitChan <- true
 						return
 					case pktResponse = <-inputChan:
+						if pktResponse.Result.GetType() == Acknowledgement {
+							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", pkt.GetSequence(), d.ID())
+							ticker.Stop()
+							if responseRequired {
+								continue
+							}
+							return
+						}
 						proxyChan <- pktResponse
 						return
-					case <-tick:
+					case <-ticker.C:
 						common.Log.Debugf("Retrying send after %d milliseconds: %+v\n", *d.retryInterval/time.Millisecond, *pkt)
 						if err := pkt.Write(); err != nil {
 							pktResponse.Error = err
@@ -440,10 +453,12 @@ func (d *Device) handler() {
 			}
 			common.Log.Debugf("Returning packet to caller on device %v: %+v\n", d.id, pktResponse)
 			ch <- pktResponse
-			d.Lock()
-			close(ch)
-			delete(d.responseMap, seq)
-			d.Unlock()
+			if pktResponse.Result.GetType() != Acknowledgement {
+				d.Lock()
+				close(ch)
+				delete(d.responseMap, seq)
+				d.Unlock()
+			}
 		}
 	}
 }
@@ -466,7 +481,7 @@ func (d *Device) publish(event interface{}) error {
 	return nil
 }
 
-func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, pkt *packet.Packet) (*Device, error) {
+func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool, pkt *packet.Packet) (*Device, error) {
 	d := &Device{
 		address:       addr,
 		requestSocket: requestSocket,
@@ -476,6 +491,7 @@ func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, 
 		quitChan:      make(chan bool),
 		timeout:       timeout,
 		retryInterval: retryInterval,
+		reliable:      reliable,
 		limiter:       time.NewTimer(shared.RateLimit),
 	}
 

@@ -14,7 +14,10 @@ import (
 // V2 implements the LIFX LAN protocol version 2.
 type V2 struct {
 	// Port determines UDP port for this protocol instance
-	Port          int
+	Port int
+	// Reliable enables reliable comms, requests ACKs for all operations to
+	// ensure they're delivered (recommended)
+	Reliable      bool
 	initialized   bool
 	socket        *net.UDPConn
 	client        common.Client
@@ -81,7 +84,7 @@ func (p *V2) init() error {
 		IP:   net.IPv4(255, 255, 255, 255),
 		Port: shared.DefaultPort,
 	}
-	dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, nil)
+	dev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, p.Reliable, nil)
 	if err != nil {
 		return err
 	}
@@ -270,7 +273,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 	case device.StateService:
 		dev, err := p.getDevice(pkt.Target)
 		if err != nil {
-			dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, pkt)
+			dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, p.Reliable, pkt)
 			if err != nil {
 				common.Log.Errorf("Failed creating device: %v\n", err)
 				return

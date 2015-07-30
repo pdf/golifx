@@ -61,7 +61,7 @@ func main() {
 func setupClient(c *cobra.Command, args []string) {
 	var err error
 
-	client, err = golifx.NewClient(&protocol.V2{})
+	client, err = golifx.NewClient(&protocol.V2{Reliable: true})
 	if err != nil {
 		logger.WithField(`error`, err).Fatalln(`Failed initializing client`)
 	}
