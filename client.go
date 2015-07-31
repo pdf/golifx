@@ -326,7 +326,7 @@ func (c *Client) Close() error {
 	}
 	c.Lock()
 	defer c.Unlock()
-	c.quitChan <- true
+	close(c.quitChan)
 	return c.protocol.Close()
 }
 
