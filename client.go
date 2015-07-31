@@ -255,7 +255,7 @@ func (c *Client) SetColor(color common.Color, duration time.Duration) error {
 func (c *Client) SetDiscoveryInterval(interval time.Duration) error {
 	c.Lock()
 	if c.discoveryInterval != 0 {
-		for i := 0; i < len(c.quitChan); i++ {
+		for i := 0; i < cap(c.quitChan); i++ {
 			c.quitChan <- true
 		}
 	}
