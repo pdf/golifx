@@ -52,16 +52,22 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 
 	if l.color != s.Color {
 		l.color = s.Color
-		l.publish(common.EventUpdateColor{Color: l.color})
+		if err := l.publish(common.EventUpdateColor{Color: l.color}); err != nil {
+			return err
+		}
 	}
 	if l.power != s.Power {
 		l.power = s.Power
-		l.publish(common.EventUpdatePower{Power: l.power > 0})
+		if err := l.publish(common.EventUpdatePower{Power: l.power > 0}); err != nil {
+			return err
+		}
 	}
 	newLabel := stripNull(string(s.Label[:]))
 	if newLabel != l.label {
 		l.label = newLabel
-		l.publish(common.EventUpdateLabel{Label: l.label})
+		if err := l.publish(common.EventUpdateLabel{Label: l.label}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -104,13 +110,17 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 
 	pkt := packet.New(l.address, l.requestSocket)
 	pkt.SetType(SetColor)
-	pkt.SetPayload(p)
+	if err := pkt.SetPayload(p); err != nil {
+		return err
+	}
 	_, err := l.Send(pkt, false, false)
 	if err != nil {
 		return err
 	}
 	l.color = color
-	l.publish(common.EventUpdateColor{Color: l.color})
+	if err := l.publish(common.EventUpdateColor{Color: l.color}); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -132,7 +142,9 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 
 	pkt := packet.New(l.address, l.requestSocket)
 	pkt.SetType(LightSetPower)
-	pkt.SetPayload(p)
+	if err := pkt.SetPayload(p); err != nil {
+		return err
+	}
 
 	common.Log.Debugf("Setting power state on %v: %v\n", l.id, state)
 	if _, err := l.Send(pkt, false, false); err != nil {
@@ -140,7 +152,9 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	}
 
 	l.power = p.Level
-	l.publish(common.EventUpdatePower{Power: l.power > 0})
+	if err := l.publish(common.EventUpdatePower{Power: l.power > 0}); err != nil {
+		return err
+	}
 
 	return nil
 }

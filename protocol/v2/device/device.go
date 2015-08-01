@@ -156,7 +156,9 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	newLabel := stripNull(string(l.Label[:]))
 	if newLabel != d.label {
 		d.label = newLabel
-		d.publish(common.EventUpdateLabel{Label: d.label})
+		if err := d.publish(common.EventUpdateLabel{Label: d.label}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -198,7 +200,9 @@ func (d *Device) SetLabel(label string) error {
 
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(SetLabel)
-	pkt.SetPayload(p)
+	if err := pkt.SetPayload(p); err != nil {
+		return err
+	}
 
 	common.Log.Debugf("Setting label on %v: %v\n", d.id, label)
 	if _, err := d.Send(pkt, false, false); err != nil {
@@ -206,7 +210,9 @@ func (d *Device) SetLabel(label string) error {
 	}
 
 	d.label = label
-	d.publish(common.EventUpdateLabel{Label: d.label})
+	if err := d.publish(common.EventUpdateLabel{Label: d.label}); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -219,7 +225,9 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 
 	if d.power != p.Level {
 		d.power = p.Level
-		d.publish(common.EventUpdatePower{Power: d.power > 0})
+		if err := d.publish(common.EventUpdatePower{Power: d.power > 0}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -262,7 +270,9 @@ func (d *Device) SetPower(state bool) error {
 
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(SetPower)
-	pkt.SetPayload(p)
+	if err := pkt.SetPayload(p); err != nil {
+		return err
+	}
 
 	common.Log.Debugf("Setting power state on %v: %v\n", d.id, state)
 	if _, err := d.Send(pkt, false, false); err != nil {
@@ -270,7 +280,9 @@ func (d *Device) SetPower(state bool) error {
 	}
 
 	d.power = p.Level
-	d.publish(common.EventUpdatePower{Power: d.power > 0})
+	if err := d.publish(common.EventUpdatePower{Power: d.power > 0}); err != nil {
+		return err
+	}
 	return nil
 }
 

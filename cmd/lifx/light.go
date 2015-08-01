@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/pdf/golifx/common"
 	"github.com/spf13/cobra"
 )
@@ -59,11 +60,21 @@ func init() {
 	cmdLightColor.Flags().Uint16VarP(&flagLightSaturation, `saturation`, `S`, 0, `saturation component of the HSBK color (0-65535)`)
 	cmdLightColor.Flags().Uint16VarP(&flagLightBrightness, `brightness`, `B`, 0, `brightness component of the HSBK color (0-65535)`)
 	cmdLightColor.Flags().Uint16VarP(&flagLightKelvin, `kelvin`, `K`, 0, `kelvin component of the HSBK color, the color temperature of whites (2500-9000)`)
-	cmdLightColor.MarkFlagRequired(`hue`)
-	cmdLightColor.MarkFlagRequired(`saturation`)
-	cmdLightColor.MarkFlagRequired(`brightness`)
-	cmdLightColor.MarkFlagRequired(`kelvin`)
-	cmdLightColor.MarkFlagRequired(`duration`)
+	if err := cmdLightColor.MarkFlagRequired(`hue`); err != nil {
+		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
+	}
+	if err := cmdLightColor.MarkFlagRequired(`saturation`); err != nil {
+		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
+	}
+	if err := cmdLightColor.MarkFlagRequired(`brightness`); err != nil {
+		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
+	}
+	if err := cmdLightColor.MarkFlagRequired(`kelvin`); err != nil {
+		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
+	}
+	if err := cmdLightColor.MarkFlagRequired(`duration`); err != nil {
+		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
+	}
 	cmdLight.AddCommand(cmdLightList)
 	cmdLight.AddCommand(cmdLightColor)
 	cmdLight.AddCommand(cmdLightPower)
@@ -129,7 +140,9 @@ func lightList(c *cobra.Command, args []string) {
 		fmt.Fprintf(table, "%v\t%s\t%v\t%+v\n", l.ID(), label, power, color)
 	}
 	fmt.Fprintln(table)
-	table.Flush()
+	if err := table.Flush(); err != nil {
+		logger.WithField(`error`, err).Fatalln(`Failed outputting results`)
+	}
 }
 
 func getLights() []common.Light {
@@ -162,7 +175,9 @@ func getLights() []common.Light {
 
 func lightPower(c *cobra.Command, args []string) {
 	if len(args) < 1 {
-		c.Usage()
+		if err := c.Usage(); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+		}
 		fmt.Println()
 		logger.Fatalln(`Missing state (on|off)`)
 	}
@@ -175,7 +190,9 @@ func lightPower(c *cobra.Command, args []string) {
 	case `off`:
 		state = false
 	default:
-		c.Usage()
+		if err := c.Usage(); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+		}
 		fmt.Println()
 		logger.WithField(`state`, args[0]).Fatalln(`Invalid power state requested, should be one of [on|off]`)
 	}
@@ -184,16 +201,25 @@ func lightPower(c *cobra.Command, args []string) {
 
 	if len(lights) > 0 {
 		for _, light := range lights {
-			light.SetPowerDuration(state, flagLightDuration)
+			if err := light.SetPowerDuration(state, flagLightDuration); err != nil {
+				logger.WithFields(logrus.Fields{
+					`light-id`: light.ID(),
+					`error`:    err,
+				}).Fatalln(`Failed setting power for light`)
+			}
 		}
 	} else {
-		client.SetPowerDuration(state, flagLightDuration)
+		if err := client.SetPowerDuration(state, flagLightDuration); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed setting power for lights`)
+		}
 	}
 }
 
 func lightColor(c *cobra.Command, args []string) {
 	if flagLightHue == 0 && flagLightSaturation == 0 && flagLightBrightness == 0 && flagLightKelvin == 0 {
-		c.Usage()
+		if err := c.Usage(); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+		}
 		fmt.Println()
 		logger.Fatalln(`Missing color definition`)
 	}
@@ -209,9 +235,16 @@ func lightColor(c *cobra.Command, args []string) {
 
 	if len(lights) > 0 {
 		for _, light := range lights {
-			light.SetColor(color, flagLightDuration)
+			if err := light.SetColor(color, flagLightDuration); err != nil {
+				logger.WithFields(logrus.Fields{
+					`light-id`: light.ID(),
+					`error`:    err,
+				}).Fatalln(`Failed setting color for light`)
+			}
 		}
 	} else {
-		client.SetColor(color, flagLightDuration)
+		if err := client.SetColor(color, flagLightDuration); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed setting color for lights`)
+		}
 	}
 }

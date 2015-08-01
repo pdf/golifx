@@ -56,7 +56,9 @@ func init() {
 }
 
 func main() {
-	app.Execute()
+	if err := app.Execute(); err != nil {
+		logger.WithField(`error`, err).Fatalln(`Failed starting app`)
+	}
 }
 
 func setupClient(c *cobra.Command, args []string) {
@@ -77,7 +79,9 @@ func closeClient(c *cobra.Command, args []string) {
 
 func generateBashComp(c *cobra.Command, args []string) {
 	if len(args) != 1 {
-		c.Usage()
+		if err := c.Usage(); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+		}
 		fmt.Println()
 		logger.Fatalln(`Missing filename`)
 	}
@@ -91,12 +95,16 @@ func generateBashComp(c *cobra.Command, args []string) {
 		}).Fatalln(`Could not open file`)
 	}
 	app.GenBashCompletion(buf)
-	buf.WriteTo(f)
+	if _, err := buf.WriteTo(f); err != nil {
+		logger.WithField(`error`, err).Fatalln(`Failed writing to file`)
+	}
 }
 
 func generateDocs(c *cobra.Command, args []string) {
 	if len(args) != 1 {
-		c.Usage()
+		if err := c.Usage(); err != nil {
+			logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+		}
 		fmt.Println()
 		logger.Fatalln(`Missing output path`)
 	}
@@ -109,7 +117,9 @@ func generateDocs(c *cobra.Command, args []string) {
 }
 
 func usage(c *cobra.Command, args []string) {
-	c.Usage()
+	if err := c.Usage(); err != nil {
+		logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
+	}
 }
 
 func setLogger() {

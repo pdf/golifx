@@ -67,7 +67,7 @@ var _ = Describe("Golifx", func() {
 		AfterEach(func() {
 			mockProtocol.SubscriptionTarget.On(`CloseSubscription`, mock.Anything).Return(nil)
 			mockProtocol.On(`Close`).Return(nil)
-			client.Close()
+			_ = client.Close()
 		})
 
 		It("should update the timeout", func() {
@@ -105,27 +105,27 @@ var _ = Describe("Golifx", func() {
 
 		It("should perform discovery on the interval", func() {
 			mockProtocol.On(`Discover`).Return(nil).Twice()
-			client.SetDiscoveryInterval(100 * time.Millisecond)
+			Expect(client.SetDiscoveryInterval(100 * time.Millisecond)).To(Succeed())
 			time.Sleep(250 * time.Millisecond)
 			mockProtocol.AssertNumberOfCalls(GinkgoT(), `Discover`, 3)
 		})
 
 		It("should send SetPower to the protocol", func() {
 			mockProtocol.On(`SetPower`, true).Return(nil)
-			client.SetPower(true)
+			Expect(client.SetPower(true)).To(Succeed())
 		})
 
 		It("should send SetPowerDuration to the protocol", func() {
 			duration := 5 * time.Second
 			mockProtocol.On(`SetPowerDuration`, true, duration).Return(nil)
-			client.SetPowerDuration(true, duration)
+			Expect(client.SetPowerDuration(true, duration)).To(Succeed())
 		})
 
 		It("should send SetColor to the protocol", func() {
 			color := common.Color{}
 			duration := 1 * time.Millisecond
 			mockProtocol.On(`SetColor`, color, duration).Return(nil)
-			client.SetColor(color, duration)
+			Expect(client.SetColor(color, duration)).To(Succeed())
 		})
 
 		It("should return an error from GetDevices when it knows no devices", func() {
@@ -144,6 +144,12 @@ var _ = Describe("Golifx", func() {
 			Expect(client.Close()).NotTo(Succeed())
 		})
 
+		It("should return an error on double-close", func() {
+			mockProtocol.On(`Close`).Return(nil)
+			Expect(client.Close()).To(Succeed())
+			Expect(client.Close()).To(Equal(common.ErrClosed))
+		})
+
 		It("should publish an EventNewDevice on discovering a device", func(done Done) {
 			mockDevice.On(`ID`).Return(deviceID)
 			event := common.EventNewDevice{Device: mockDevice}
@@ -152,7 +158,7 @@ var _ = Describe("Golifx", func() {
 				evt := <-clientSubscription.Events()
 				ch <- evt
 			}()
-			protocolSubscription.Write(event)
+			_ = protocolSubscription.Write(event)
 			Expect(<-ch).To(Equal(event))
 			close(done)
 		})
@@ -164,7 +170,7 @@ var _ = Describe("Golifx", func() {
 				<-clientSubscription.Events()
 				ch <- true
 			}()
-			protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
+			_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
 			<-ch
 			devices, err := client.GetDevices()
 			Expect(len(devices)).To(Equal(1))
@@ -177,7 +183,7 @@ var _ = Describe("Golifx", func() {
 			BeforeEach(func() {
 				mockDevice.On(`ID`).Return(deviceID).Once()
 				clientSubscription, _ = client.NewSubscription()
-				protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
+				_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
 				<-clientSubscription.Events()
 			})
 
@@ -201,7 +207,7 @@ var _ = Describe("Golifx", func() {
 						ch <- true
 					})
 					mockDevice.On(`ID`).Return(deviceID).Once()
-					protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
+					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
 					Expect(<-ch).To(Equal(true))
 					devices, err := client.GetDevices()
 					Expect(len(devices)).To(Equal(1))
@@ -216,7 +222,7 @@ var _ = Describe("Golifx", func() {
 						<-clientSubscription.Events()
 						ch <- true
 					}()
-					protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
+					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
 					<-ch
 					devices, _ := client.GetDevices()
 					Expect(len(devices)).To(Equal(2))
@@ -230,7 +236,7 @@ var _ = Describe("Golifx", func() {
 						<-clientSubscription.Events()
 						ch <- true
 					}()
-					protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
+					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
 					<-ch
 					devices, _ := client.GetDevices()
 					Expect(len(devices)).To(Equal(2))
@@ -276,7 +282,7 @@ var _ = Describe("Golifx", func() {
 							errChan <- err
 						}()
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
-						protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
+						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
 						Expect(<-devChan).To(Equal(unknownDevice))
 						Expect(<-errChan).NotTo(HaveOccurred())
 						close(done)
@@ -294,7 +300,7 @@ var _ = Describe("Golifx", func() {
 						}()
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
 						unknownDevice.On(`GetLabel`).Return(deviceUnknownLabel, nil).Once()
-						protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
+						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
 						Expect(<-devChan).To(Equal(unknownDevice))
 						Expect(<-errChan).NotTo(HaveOccurred())
 						close(done)
@@ -337,7 +343,7 @@ var _ = Describe("Golifx", func() {
 						evt := <-clientSubscription.Events()
 						ch <- evt
 					}()
-					protocolSubscription.Write(event)
+					_ = protocolSubscription.Write(event)
 					Expect(<-ch).To(Equal(event))
 					close(done)
 				})
@@ -353,7 +359,7 @@ var _ = Describe("Golifx", func() {
 					time.AfterFunc(timeout*2, func() {
 						ch <- true
 					})
-					protocolSubscription.Write(event)
+					_ = protocolSubscription.Write(event)
 					Expect(<-ch).To(Equal(true))
 					devices, _ := client.GetDevices()
 					Expect(len(devices)).To(Equal(1))
@@ -372,7 +378,7 @@ var _ = Describe("Golifx", func() {
 				BeforeEach(func() {
 					mockLight.Device.On(`ID`).Return(lightID).Once()
 					clientSubscription, _ = client.NewSubscription()
-					protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
+					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
 					<-clientSubscription.Events()
 				})
 

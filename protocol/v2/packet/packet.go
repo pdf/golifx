@@ -177,7 +177,9 @@ func (p *Packet) Write() error {
 		return err
 	}
 	sizeBuf = new(bytes.Buffer)
-	binary.Write(sizeBuf, binary.LittleEndian, p.Frame.Size)
+	if err := binary.Write(sizeBuf, binary.LittleEndian, p.Frame.Size); err != nil {
+		return err
+	}
 	size = sizeBuf.Bytes()
 	// Set size
 	for i, b := range size {
@@ -227,12 +229,12 @@ func (p *Packet) encode() (length uint16, byteArr []byte, err error) {
 		p.mutex.RUnlock()
 		return
 	}
-	binary.Write(buf, binary.LittleEndian, p.FrameAddress)
+	err = binary.Write(buf, binary.LittleEndian, p.FrameAddress)
 	if err != nil {
 		p.mutex.RUnlock()
 		return
 	}
-	binary.Write(buf, binary.LittleEndian, p.ProtocolHeader)
+	err = binary.Write(buf, binary.LittleEndian, p.ProtocolHeader)
 	if err != nil {
 		p.mutex.RUnlock()
 		return

@@ -145,7 +145,9 @@ func (p *V2) Discover() error {
 			}
 		}
 	}
-	p.broadcast.Discover()
+	if err := p.broadcast.Discover(); err != nil {
+		return err
+	}
 	p.Lock()
 	p.lastDiscovery = time.Now()
 	p.Unlock()
@@ -158,13 +160,14 @@ func (p *V2) SetPower(state bool) error {
 	return p.broadcast.SetPower(state)
 }
 
-// SetPower sets the power state globally, on all devices
+// SetPowerDuration sets the power state globally, on all devices, transitioning
+// over the specified duration
 func (p *V2) SetPowerDuration(state bool, duration time.Duration) error {
 	return p.broadcast.SetPowerDuration(state, duration)
 }
 
-// SetColor changes the color globally, on all lights, over the specified
-// duration
+// SetColor changes the color globally, on all lights, transitioning over the
+// specified duration
 func (p *V2) SetColor(color common.Color, duration time.Duration) error {
 	return p.broadcast.SetColor(color, duration)
 }
@@ -182,12 +185,13 @@ func (p *V2) dispatcher() {
 		case <-p.quitChan:
 			p.Lock()
 			for _, dev := range p.devices {
-				err := dev.Close()
-				if err != nil {
+				if err := dev.Close(); err != nil {
 					common.Log.Errorf("Failed closing device '%v': %v\n", dev.ID(), err)
 				}
 			}
-			p.socket.Close()
+			if err := p.socket.Close(); err != nil {
+				common.Log.Errorf("Failed closing socket: %v\n", err)
+			}
 			p.Unlock()
 			return
 		default:
@@ -243,7 +247,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 				common.Log.Debugf("Skipping StateLabel packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
-			dev.SetStateLabel(pkt)
+			err = dev.SetStateLabel(pkt)
 			if err != nil {
 				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
