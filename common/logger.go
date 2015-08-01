@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"os"
+	"sync"
 )
 
 // Logger represents a minimal levelled logger
@@ -49,36 +50,49 @@ func (l *StubLogger) Panicf(format string, args ...interface{}) {
 
 type logPrefixer struct {
 	log Logger
+	sync.Mutex
 }
 
 // Debugf handles debug level messages, prefixing them for golifx
 func (l *logPrefixer) Debugf(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Debugf(l.prefix(format), args...)
+	l.Unlock()
 }
 
 // Infof handles info level messages, prefixing them for golifx
 func (l *logPrefixer) Infof(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Infof(l.prefix(format), args...)
+	l.Unlock()
 }
 
 // Warnf handles warn level messages, prefixing them for golifx
 func (l *logPrefixer) Warnf(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Warnf(l.prefix(format), args...)
+	l.Unlock()
 }
 
 // Errorf handles error level messages, prefixing them for golifx
 func (l *logPrefixer) Errorf(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Errorf(l.prefix(format), args...)
+	l.Unlock()
 }
 
 // Fatalf handles fatal level messages, prefixing them for golifx
 func (l *logPrefixer) Fatalf(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Fatalf(l.prefix(format), args...)
+	l.Unlock()
 }
 
 // Panicf handles debug level messages, prefixing them for golifx
 func (l *logPrefixer) Panicf(format string, args ...interface{}) {
+	l.Lock()
 	l.log.Panicf(l.prefix(format), args...)
+	l.Unlock()
 }
 
 func (l *logPrefixer) prefix(format string) string {
