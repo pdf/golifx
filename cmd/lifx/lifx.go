@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"runtime"
 	"time"
@@ -77,6 +78,7 @@ func closeClient(c *cobra.Command, args []string) {
 func generateBashComp(c *cobra.Command, args []string) {
 	if len(args) != 1 {
 		c.Usage()
+		fmt.Println()
 		logger.Fatalln(`Missing filename`)
 	}
 
@@ -95,6 +97,7 @@ func generateBashComp(c *cobra.Command, args []string) {
 func generateDocs(c *cobra.Command, args []string) {
 	if len(args) != 1 {
 		c.Usage()
+		fmt.Println()
 		logger.Fatalln(`Missing output path`)
 	}
 

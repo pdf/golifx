@@ -38,7 +38,7 @@ var (
 	cmdLightPower = &cobra.Command{
 		Use:       `power`,
 		Short:     `[on|off]`,
-		Long:      `[on|off]`,
+		Long:      `lifx light power [on|off]`,
 		ValidArgs: []string{`on`, `off`},
 		PreRun:    setupClient,
 		Run:       lightPower,
@@ -163,6 +163,7 @@ func getLights() []common.Light {
 func lightPower(c *cobra.Command, args []string) {
 	if len(args) < 1 {
 		c.Usage()
+		fmt.Println()
 		logger.Fatalln(`Missing state (on|off)`)
 	}
 
@@ -175,7 +176,8 @@ func lightPower(c *cobra.Command, args []string) {
 		state = false
 	default:
 		c.Usage()
-		logger.WithField(`state`, args[0]).Fatalln(`Invalid power state requested`)
+		fmt.Println()
+		logger.WithField(`state`, args[0]).Fatalln(`Invalid power state requested, should be one of [on|off]`)
 	}
 
 	lights := getLights()
@@ -192,6 +194,7 @@ func lightPower(c *cobra.Command, args []string) {
 func lightColor(c *cobra.Command, args []string) {
 	if flagLightHue == 0 && flagLightSaturation == 0 && flagLightBrightness == 0 && flagLightKelvin == 0 {
 		c.Usage()
+		fmt.Println()
 		logger.Fatalln(`Missing color definition`)
 	}
 
