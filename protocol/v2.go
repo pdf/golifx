@@ -172,7 +172,7 @@ func (p *V2) SetColor(color common.Color, duration time.Duration) error {
 // Close closes the protocol driver, no further communication with the protocol
 // is possible
 func (p *V2) Close() error {
-	p.quitChan <- true
+	close(p.quitChan)
 	return nil
 }
 

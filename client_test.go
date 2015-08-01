@@ -42,7 +42,7 @@ var _ = Describe("Golifx", func() {
 		mockProtocol = new(mocks.Protocol)
 		mockProtocol.On(`SetClient`, mock.Anything).Return()
 		mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(common.NewSubscription(mockProtocol), nil)
-		mockProtocol.On(`Discover`).Return(nil)
+		mockProtocol.On(`Discover`).Return(nil).Once()
 
 		client, err = NewClient(mockProtocol)
 		Expect(client).To(BeAssignableToTypeOf(new(Client)))
@@ -54,7 +54,7 @@ var _ = Describe("Golifx", func() {
 			mockProtocol = new(mocks.Protocol)
 			mockProtocol.On(`SetClient`, mock.Anything).Return()
 			mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(common.NewSubscription(mockProtocol), nil)
-			mockProtocol.On(`Discover`).Return(nil)
+			mockProtocol.On(`Discover`).Return(nil).Once()
 			client, _ = NewClient(mockProtocol)
 			client.SetTimeout(timeout)
 			protocolSubscription, _ = mockProtocol.NewSubscription()
@@ -104,8 +104,10 @@ var _ = Describe("Golifx", func() {
 		})
 
 		It("should perform discovery on the interval", func() {
-			client.SetDiscoveryInterval(5 * time.Millisecond)
-			time.Sleep(11 * time.Millisecond)
+			mockProtocol.On(`Discover`).Return(nil).Twice()
+			client.SetDiscoveryInterval(100 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
+			mockProtocol.AssertNumberOfCalls(GinkgoT(), `Discover`, 3)
 		})
 
 		It("should send SetPower to the protocol", func() {

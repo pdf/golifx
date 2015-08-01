@@ -380,9 +380,12 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 					close(doneChan)
 				}()
 
-				var timeout <-chan time.Time
-				pktResponse := packet.Response{}
-				ticker := time.NewTicker(*d.retryInterval)
+				var (
+					ok          bool
+					timeout     <-chan time.Time
+					pktResponse = packet.Response{}
+					ticker      = time.NewTicker(*d.retryInterval)
+				)
 
 				if d.timeout == nil || *d.timeout == 0 {
 					timeout = make(<-chan time.Time)
@@ -392,11 +395,11 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 				for {
 					select {
-					case <-d.quitChan:
-						// Re-populate the quitChan for other routines
-						d.quitChan <- true
-						return
-					case pktResponse = <-inputChan:
+					case pktResponse, ok = <-inputChan:
+						if !ok {
+							close(proxyChan)
+							return
+						}
 						if pktResponse.Result.GetType() == Acknowledgement {
 							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", seq, d.ID())
 							ticker.Stop()
@@ -431,11 +434,16 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 }
 
 func (d *Device) Seen() time.Time {
-	return d.seen
+	d.RLock()
+	seen := d.seen
+	d.RUnlock()
+	return seen
 }
 
 func (d *Device) SetSeen(seen time.Time) {
+	d.Lock()
 	d.seen = seen
+	d.Unlock()
 }
 
 func (d *Device) Close() error {
@@ -458,8 +466,14 @@ func (d *Device) handler() {
 
 		select {
 		case <-d.quitChan:
-			// Re-populate the quitChan for other routines
-			d.quitChan <- true
+			d.Lock()
+			for seq, ch := range d.responseMap {
+				ch <- packet.Response{Error: common.ErrClosed}
+				close(ch)
+				delete(d.responseMap, seq)
+				delete(d.doneMap, seq)
+			}
+			d.Unlock()
 			return
 		case pktResponse = <-d.responseInput:
 			common.Log.Debugf("Handling packet on device %v: %+v\n", d.id, pktResponse)

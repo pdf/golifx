@@ -48,9 +48,14 @@ func (s *Subscription) Write(event interface{}) error {
 // Close cleans up resources and notifies the target that the subscription
 // should no longer be used.  It is important to close subscriptions when you
 // are done with them to avoid blocking operations.
-func (s *Subscription) Close() {
-	close(s.events)
-	s.target.CloseSubscription(s)
+func (s *Subscription) Close() error {
+	select {
+	case <-s.events:
+		return ErrClosed
+	default:
+		close(s.events)
+	}
+	return s.target.CloseSubscription(s)
 }
 
 // NewSubscription returns a *Subscription attached to the specified target

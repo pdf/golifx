@@ -322,11 +322,18 @@ func (c *Client) CloseSubscription(sub *common.Subscription) error {
 // Close signals the termination of this client, and cleans up resources
 func (c *Client) Close() error {
 	for _, sub := range c.subscriptions {
-		sub.Close()
+		if err := sub.Close(); err != nil {
+			return err
+		}
 	}
 	c.Lock()
 	defer c.Unlock()
-	close(c.quitChan)
+	select {
+	case <-c.quitChan:
+		return common.ErrClosed
+	default:
+		close(c.quitChan)
+	}
 	return c.protocol.Close()
 }
 
@@ -358,7 +365,7 @@ func (c *Client) subscribe() error {
 		for {
 			select {
 			case <-c.quitChan:
-				sub.Close()
+				_ = sub.Close()
 				return
 			case event := <-events:
 				switch event := event.(type) {
