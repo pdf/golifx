@@ -72,9 +72,6 @@ func init() {
 	if err := cmdLightColor.MarkFlagRequired(`kelvin`); err != nil {
 		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
 	}
-	if err := cmdLightColor.MarkFlagRequired(`duration`); err != nil {
-		logger.WithField(`error`, err).Panicln(`Failed initializing application`)
-	}
 	cmdLight.AddCommand(cmdLightList)
 	cmdLight.AddCommand(cmdLightColor)
 	cmdLight.AddCommand(cmdLightPower)
