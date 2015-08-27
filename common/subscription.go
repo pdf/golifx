@@ -18,9 +18,10 @@ type SubscriptionTarget interface {
 // Subscription exposes an event channel for consumers, and attaches to a
 // SubscriptionTarget, that will feed it with events
 type Subscription struct {
-	events chan interface{}
-	id     uuid.UUID
-	target SubscriptionTarget
+	events   chan interface{}
+	quitChan chan bool
+	id       uuid.UUID
+	target   SubscriptionTarget
 }
 
 // ID returns the unique ID for this subscription
@@ -38,6 +39,8 @@ func (s *Subscription) Events() <-chan interface{} {
 func (s *Subscription) Write(event interface{}) error {
 	timeout := time.After(DefaultTimeout)
 	select {
+	case <-s.quitChan:
+		return ErrClosed
 	case s.events <- event:
 		return nil
 	case <-timeout:
@@ -50,9 +53,11 @@ func (s *Subscription) Write(event interface{}) error {
 // are done with them to avoid blocking operations.
 func (s *Subscription) Close() error {
 	select {
-	case <-s.events:
+	case <-s.quitChan:
+		Log.Warnf(`subscription already closed`)
 		return ErrClosed
 	default:
+		close(s.quitChan)
 		close(s.events)
 	}
 	return s.target.CloseSubscription(s)
@@ -61,8 +66,9 @@ func (s *Subscription) Close() error {
 // NewSubscription returns a *Subscription attached to the specified target
 func NewSubscription(target SubscriptionTarget) *Subscription {
 	return &Subscription{
-		events: make(chan interface{}, subscriptionChanSize),
-		id:     uuid.NewV4(),
-		target: target,
+		events:   make(chan interface{}, subscriptionChanSize),
+		quitChan: make(chan bool),
+		id:       uuid.NewV4(),
+		target:   target,
 	}
 }

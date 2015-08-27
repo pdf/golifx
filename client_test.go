@@ -21,13 +21,16 @@ func init() {
 
 var _ = Describe("Golifx", func() {
 	var (
-		mockProtocol         *mocks.Protocol
-		mockDevice           *mocks.Device
-		mockLight            *mocks.Light
 		client               *Client
 		protocolSubscription *common.Subscription
 		clientSubscription   *common.Subscription
-		timeout              = 50 * time.Millisecond
+		timeout              = 200 * time.Millisecond
+
+		mockProtocol *mocks.Protocol
+		mockDevice   *mocks.Device
+		mockLight    *mocks.Light
+		mockLocation *mocks.Location
+		mockGroup    *mocks.Group
 
 		deviceID           = uint64(1234)
 		deviceUnknownID    = uint64(4321)
@@ -35,6 +38,15 @@ var _ = Describe("Golifx", func() {
 		deviceUnknownLabel = `unknownDevice`
 		lightID            = uint64(5678)
 		lightLabel         = `mockLight`
+
+		locationID           = `mockLocationID`
+		locationUnknownID    = `unknownLocationID`
+		locationLabel        = `mockLocation`
+		locationUnknownLabel = `unknownLocation`
+		groupID              = `mockGroupID`
+		groupUnknownID       = `unknownGroupID`
+		groupLabel           = `mockGroup`
+		groupUnknownLabel    = `unknownGroup`
 	)
 
 	It("should send discovery to the protocol on NewClient", func() {
@@ -62,6 +74,8 @@ var _ = Describe("Golifx", func() {
 
 			mockDevice = new(mocks.Device)
 			mockLight = new(mocks.Light)
+			mockLocation = new(mocks.Location)
+			mockGroup = new(mocks.Group)
 		})
 
 		AfterEach(func() {
@@ -128,6 +142,18 @@ var _ = Describe("Golifx", func() {
 			Expect(client.SetColor(color, duration)).To(Succeed())
 		})
 
+		It("should return an error from GetLocations when it knows no locations", func() {
+			locations, err := client.GetLocations()
+			Expect(len(locations)).To(Equal(0))
+			Expect(err).To(Equal(common.ErrNotFound))
+		})
+
+		It("should return an error from GetGroups when it knows no groups", func() {
+			groups, err := client.GetGroups()
+			Expect(len(groups)).To(Equal(0))
+			Expect(err).To(Equal(common.ErrNotFound))
+		})
+
 		It("should return an error from GetDevices when it knows no devices", func() {
 			devices, err := client.GetDevices()
 			Expect(len(devices)).To(Equal(0))
@@ -150,6 +176,32 @@ var _ = Describe("Golifx", func() {
 			Expect(client.Close()).To(Equal(common.ErrClosed))
 		})
 
+		It("should publish an EventNewLocation on discovering a location", func(done Done) {
+			mockLocation.Group.On(`ID`).Return(locationID)
+			event := common.EventNewLocation{Location: mockLocation}
+			ch := make(chan interface{})
+			go func() {
+				evt := <-clientSubscription.Events()
+				ch <- evt
+			}()
+			_ = protocolSubscription.Write(event)
+			Expect(<-ch).To(Equal(event))
+			close(done)
+		})
+
+		It("should publish an EventNewGroup on discovering a group", func(done Done) {
+			mockGroup.On(`ID`).Return(groupID)
+			event := common.EventNewGroup{Group: mockGroup}
+			ch := make(chan interface{})
+			go func() {
+				evt := <-clientSubscription.Events()
+				ch <- evt
+			}()
+			_ = protocolSubscription.Write(event)
+			Expect(<-ch).To(Equal(event))
+			close(done)
+		})
+
 		It("should publish an EventNewDevice on discovering a device", func(done Done) {
 			mockDevice.On(`ID`).Return(deviceID)
 			event := common.EventNewDevice{Device: mockDevice}
@@ -160,6 +212,36 @@ var _ = Describe("Golifx", func() {
 			}()
 			_ = protocolSubscription.Write(event)
 			Expect(<-ch).To(Equal(event))
+			close(done)
+		})
+
+		It("should add a location", func(done Done) {
+			mockLocation.Group.On(`ID`).Return(locationID)
+			ch := make(chan bool)
+			go func() {
+				<-clientSubscription.Events()
+				ch <- true
+			}()
+			_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
+			<-ch
+			locations, err := client.GetLocations()
+			Expect(len(locations)).To(Equal(1))
+			Expect(err).NotTo(HaveOccurred())
+			close(done)
+		})
+
+		It("should add a group", func(done Done) {
+			mockGroup.On(`ID`).Return(groupID)
+			ch := make(chan bool)
+			go func() {
+				<-clientSubscription.Events()
+				ch <- true
+			}()
+			_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
+			<-ch
+			groups, err := client.GetGroups()
+			Expect(len(groups)).To(Equal(1))
+			Expect(err).NotTo(HaveOccurred())
 			close(done)
 		})
 
@@ -176,6 +258,358 @@ var _ = Describe("Golifx", func() {
 			Expect(len(devices)).To(Equal(1))
 			Expect(err).NotTo(HaveOccurred())
 			close(done)
+		})
+
+		Context("with locations", func() {
+
+			BeforeEach(func() {
+				mockLocation.Group.On(`ID`).Return(locationID).Once()
+				clientSubscription, _ = client.NewSubscription()
+				_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
+				<-clientSubscription.Events()
+			})
+
+			Context("adding a location", func() {
+				It("should return the location", func() {
+					locations, err := client.GetLocations()
+					Expect(len(locations)).To(Equal(1))
+					Expect(locations[0]).To(Equal(mockLocation))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should not add a duplicate location", func(done Done) {
+					var err error
+					Expect(err).NotTo(HaveOccurred())
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- false
+					}()
+					time.AfterFunc(timeout*2, func() {
+						ch <- true
+					})
+					mockLocation.Group.On(`ID`).Return(locationID).Once()
+					_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
+					Expect(<-ch).To(Equal(true))
+					locations, err := client.GetLocations()
+					Expect(len(locations)).To(Equal(1))
+					Expect(err).NotTo(HaveOccurred())
+					close(done)
+				})
+
+				It("should add another location", func(done Done) {
+					mockLocation.Group.On(`ID`).Return(locationUnknownID).Once()
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- true
+					}()
+					_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
+					<-ch
+					locations, _ := client.GetLocations()
+					Expect(len(locations)).To(Equal(2))
+					close(done)
+				})
+			})
+
+			Context("finding a location", func() {
+				It("should find it by ID", func() {
+					loc, err := client.GetLocationByID(locationID)
+					Expect(loc).To(Equal(mockLocation))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return an error when the ID is not known", func() {
+					_, err := client.GetLocationByID(locationUnknownID)
+					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				It("should find it by label", func() {
+					mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
+					loc, err := client.GetLocationByLabel(locationLabel)
+					Expect(loc).To(Equal(mockLocation))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return an error when the label is not known", func() {
+					mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil)
+					_, err := client.GetLocationByLabel(locationUnknownLabel)
+					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				Context("when the location is added while searching", func() {
+
+					It("should find it by ID", func(done Done) {
+						locChan := make(chan common.Location)
+						errChan := make(chan error)
+						unknownLocation := new(mocks.Location)
+						go func() {
+							loc, err := client.GetLocationByID(locationUnknownID)
+							errChan <- err
+							locChan <- loc
+						}()
+						unknownLocation.Group.On(`ID`).Return(locationUnknownID).Once()
+						_ = protocolSubscription.Write(common.EventNewLocation{Location: unknownLocation})
+						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-locChan).To(Equal(unknownLocation))
+						close(done)
+					})
+
+					It("should find it by label", func(done Done) {
+						locChan := make(chan common.Location)
+						errChan := make(chan error)
+						unknownLocation := new(mocks.Location)
+						mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
+						go func() {
+							loc, err := client.GetLocationByLabel(locationUnknownLabel)
+							errChan <- err
+							locChan <- loc
+						}()
+						unknownLocation.Group.On(`ID`).Return(locationUnknownID).Once()
+						unknownLocation.Group.On(`GetLabel`).Return(locationUnknownLabel, nil).Once()
+						_ = protocolSubscription.Write(common.EventNewLocation{Location: unknownLocation})
+						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-locChan).To(Equal(unknownLocation))
+						close(done)
+					})
+
+				})
+
+				Context("with zero timeout", func() {
+					BeforeEach(func() {
+						client.SetTimeout(0)
+					})
+
+					It("should not timeout searching by ID", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						_, err := client.GetLocationByID(locationUnknownID)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil)
+						_, err := client.GetLocationByLabel(locationUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+			})
+
+			Context("removing a location", func() {
+				It("should emit an EventExpiredLocation when a location is removed", func(done Done) {
+					mockLocation.Group.On(`ID`).Return(locationID).Once()
+					event := common.EventExpiredLocation{Location: mockLocation}
+					ch := make(chan interface{})
+					go func() {
+						evt := <-clientSubscription.Events()
+						ch <- evt
+					}()
+					_ = protocolSubscription.Write(event)
+					Expect(<-ch).To(Equal(event))
+					close(done)
+				})
+
+				It("should not remove it when it is not known", func(done Done) {
+					mockLocation.Group.On(`ID`).Return(locationUnknownID).Once()
+					event := common.EventExpiredLocation{Location: mockLocation}
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- false
+					}()
+					time.AfterFunc(timeout*2, func() {
+						ch <- true
+					})
+					_ = protocolSubscription.Write(event)
+					Expect(<-ch).To(Equal(true))
+					locations, _ := client.GetLocations()
+					Expect(len(locations)).To(Equal(1))
+					close(done)
+				})
+
+			})
+		})
+
+		Context("with groups", func() {
+
+			BeforeEach(func() {
+				mockGroup.On(`ID`).Return(groupID).Once()
+				clientSubscription, _ = client.NewSubscription()
+				_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
+				<-clientSubscription.Events()
+			})
+
+			Context("adding a group", func() {
+				It("should return the group", func() {
+					groups, err := client.GetGroups()
+					Expect(len(groups)).To(Equal(1))
+					Expect(groups[0]).To(Equal(mockGroup))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should not add a duplicate group", func(done Done) {
+					var err error
+					Expect(err).NotTo(HaveOccurred())
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- false
+					}()
+					time.AfterFunc(timeout*2, func() {
+						ch <- true
+					})
+					mockGroup.On(`ID`).Return(groupID).Once()
+					_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
+					Expect(<-ch).To(Equal(true))
+					groups, err := client.GetGroups()
+					Expect(len(groups)).To(Equal(1))
+					Expect(err).NotTo(HaveOccurred())
+					close(done)
+				})
+
+				It("should add another group", func(done Done) {
+					mockGroup.On(`ID`).Return(groupUnknownID).Once()
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- true
+					}()
+					_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
+					<-ch
+					groups, _ := client.GetGroups()
+					Expect(len(groups)).To(Equal(2))
+					close(done)
+				})
+			})
+
+			Context("finding a group", func() {
+				It("should find it by ID", func() {
+					grp, err := client.GetGroupByID(groupID)
+					Expect(grp).To(Equal(mockGroup))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return an error when the ID is not known", func() {
+					_, err := client.GetGroupByID(groupUnknownID)
+					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				It("should find it by label", func() {
+					mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
+					grp, err := client.GetGroupByLabel(groupLabel)
+					Expect(grp).To(Equal(mockGroup))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return an error when the label is not known", func() {
+					mockGroup.On(`GetLabel`).Return(groupLabel, nil)
+					_, err := client.GetGroupByLabel(groupUnknownLabel)
+					Expect(err).To(MatchError(common.ErrNotFound))
+				})
+
+				Context("when the group is added while searching", func() {
+
+					It("should find it by ID", func(done Done) {
+						grpChan := make(chan common.Group)
+						errChan := make(chan error)
+						unknownGroup := new(mocks.Group)
+						go func() {
+							grp, err := client.GetGroupByID(groupUnknownID)
+							errChan <- err
+							grpChan <- grp
+						}()
+						unknownGroup.On(`ID`).Return(groupUnknownID).Once()
+						_ = protocolSubscription.Write(common.EventNewGroup{Group: unknownGroup})
+						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-grpChan).To(Equal(unknownGroup))
+						close(done)
+					})
+
+					It("should find it by label", func(done Done) {
+						grpChan := make(chan common.Group)
+						errChan := make(chan error)
+						unknownGroup := new(mocks.Group)
+						mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
+						go func() {
+							grp, err := client.GetGroupByLabel(groupUnknownLabel)
+							errChan <- err
+							grpChan <- grp
+						}()
+						unknownGroup.On(`ID`).Return(groupUnknownID).Once()
+						unknownGroup.On(`GetLabel`).Return(groupUnknownLabel, nil).Once()
+						_ = protocolSubscription.Write(common.EventNewGroup{Group: unknownGroup})
+						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-grpChan).To(Equal(unknownGroup))
+						close(done)
+					})
+
+				})
+
+				Context("with zero timeout", func() {
+					BeforeEach(func() {
+						client.SetTimeout(0)
+					})
+
+					It("should not timeout searching by ID", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						_, err := client.GetGroupByID(groupUnknownID)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockGroup.On(`GetLabel`).Return(groupLabel, nil)
+						_, err := client.GetGroupByLabel(groupUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
+				})
+			})
+
+			Context("removing a group", func() {
+				It("should emit an EventExpiredGroup when a group is removed", func(done Done) {
+					mockGroup.On(`ID`).Return(groupID).Once()
+					event := common.EventExpiredGroup{Group: mockGroup}
+					ch := make(chan interface{})
+					go func() {
+						evt := <-clientSubscription.Events()
+						ch <- evt
+					}()
+					_ = protocolSubscription.Write(event)
+					Expect(<-ch).To(Equal(event))
+					close(done)
+				})
+
+				It("should not remove it when it is not known", func(done Done) {
+					mockGroup.On(`ID`).Return(groupUnknownID).Once()
+					event := common.EventExpiredGroup{Group: mockGroup}
+					ch := make(chan bool)
+					go func() {
+						<-clientSubscription.Events()
+						ch <- false
+					}()
+					time.AfterFunc(timeout*2, func() {
+						ch <- true
+					})
+					_ = protocolSubscription.Write(event)
+					Expect(<-ch).To(Equal(true))
+					groups, _ := client.GetGroups()
+					Expect(len(groups)).To(Equal(1))
+					close(done)
+				})
+
+			})
 		})
 
 		Context("with devices", func() {
@@ -278,13 +712,13 @@ var _ = Describe("Golifx", func() {
 						unknownDevice := new(mocks.Device)
 						go func() {
 							dev, err := client.GetDeviceByID(deviceUnknownID)
-							devChan <- dev
 							errChan <- err
+							devChan <- dev
 						}()
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
 						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
-						Expect(<-devChan).To(Equal(unknownDevice))
 						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-devChan).To(Equal(unknownDevice))
 						close(done)
 					})
 
@@ -295,14 +729,14 @@ var _ = Describe("Golifx", func() {
 						mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
 						go func() {
 							dev, err := client.GetDeviceByLabel(deviceUnknownLabel)
-							devChan <- dev
 							errChan <- err
+							devChan <- dev
 						}()
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
 						unknownDevice.On(`GetLabel`).Return(deviceUnknownLabel, nil).Once()
 						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
-						Expect(<-devChan).To(Equal(unknownDevice))
 						Expect(<-errChan).NotTo(HaveOccurred())
+						Expect(<-devChan).To(Equal(unknownDevice))
 						close(done)
 					})
 

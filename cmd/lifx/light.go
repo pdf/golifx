@@ -91,26 +91,18 @@ func lightList(c *cobra.Command, args []string) {
 	if flagTimeout == 0 {
 		logger.Fatalln(`Can not list with a timeout of zero`)
 	}
-	timeout = time.After(flagTimeout)
-	tick := time.Tick(100 * time.Millisecond)
-	timedOut := false
 
-	for {
-		select {
-		case <-tick:
-			lights, err = client.GetLights()
-			if err != nil && err != common.ErrNotFound {
-				logger.WithField(`error`, err).Fatalln(`Could not find lights`)
-			}
-		case <-timeout:
-			if len(lights) == 0 {
-				logger.Fatalln(`No lights found`)
-			}
-			timedOut = true
-			break
-		}
-		if timedOut {
-			break
+	if len(flagLightIDs) > 0 || len(flagLightLabels) > 0 {
+		lights = getLights()
+	} else {
+		timeout = time.After(flagTimeout)
+		<-timeout
+
+		lights, err = client.GetLights()
+		if err == common.ErrNotFound {
+			logger.Fatalln(`No lights found`)
+		} else if err != nil {
+			logger.WithField(`error`, err).Fatalln(`Could not find lights`)
 		}
 	}
 
@@ -121,17 +113,17 @@ func lightList(c *cobra.Command, args []string) {
 	for _, l := range lights {
 		label, err := l.GetLabel()
 		if err != nil {
-			logger.WithField(`light_id`, l.ID()).Warnln(`Couldn't get color for light`)
+			logger.WithField(`light-id`, l.ID()).Warnln(`Couldn't get color for light`)
 			continue
 		}
 		power, err := l.GetPower()
 		if err != nil {
-			logger.WithField(`light_id`, l.ID()).Warnln(`Couldn't get color for light`)
+			logger.WithField(`light-id`, l.ID()).Warnln(`Couldn't get color for light`)
 			continue
 		}
 		color, err := l.GetColor()
 		if err != nil {
-			logger.WithField(`light_id`, l.ID()).Warnln(`Couldn't get color for light`)
+			logger.WithField(`light-id`, l.ID()).Warnln(`Couldn't get color for light`)
 			continue
 		}
 		fmt.Fprintf(table, "%v\t%s\t%v\t%+v\n", l.ID(), label, power, color)
@@ -152,7 +144,10 @@ func getLights() []common.Light {
 		for _, id := range flagLightIDs {
 			light, err := client.GetLightByID(uint64(id))
 			if err != nil {
-				logger.WithField(`error`, err).Fatalf("Could not find light with ID '%v': %v", id, err)
+				logger.WithFields(logrus.Fields{
+					`error`: err,
+					`ID`:    id,
+				}).Fatalln(`Could not find light with requested ID`)
 			}
 			lights = append(lights, light)
 		}
@@ -161,7 +156,10 @@ func getLights() []common.Light {
 		for _, label := range flagLightLabels {
 			light, err := client.GetLightByLabel(label)
 			if err != nil {
-				logger.WithField(`error`, err).Fatalf("Could not find light with label '%v': %v", label, err)
+				logger.WithFields(logrus.Fields{
+					`error`: err,
+					`label`: label,
+				}).Fatalln(`Could not find light with requested label`)
 			}
 			lights = append(lights, light)
 		}

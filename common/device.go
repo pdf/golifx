@@ -4,7 +4,6 @@ import "time"
 
 // Device represents a generic LIFX device
 type Device interface {
-	SubscriptionTarget
 	// Returns the ID for the device
 	ID() uint64
 
@@ -16,12 +15,13 @@ type Device interface {
 	GetPower() (bool, error)
 	// Sets the power state of the device, true for on, false for off
 	SetPower(state bool) error
+
+	// Device is a SubscriptionTarget
+	SubscriptionTarget
 }
 
 // Light represents a LIFX light device
 type Light interface {
-	// A light is a superset of the Device interface
-	Device
 	// SetColor changes the color of the light, transitioning over the specified
 	// duration
 	SetColor(color Color, duration time.Duration) error
@@ -30,4 +30,7 @@ type Light interface {
 	// SetPowerDuration sets the power of the light, transitioning over the
 	// speficied duration, state is true for on, false for off.
 	SetPowerDuration(state bool, duration time.Duration) error
+
+	// Light is a superset of the Device interface
+	Device
 }

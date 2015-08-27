@@ -7,7 +7,6 @@ package device
 import (
 	"math"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,11 +37,18 @@ const (
 	GetInfo           shared.Message = 34
 	StateInfo         shared.Message = 35
 	Acknowledgement   shared.Message = 45
+	GetLocation       shared.Message = 48
+	StateLocation     shared.Message = 50
+	GetGroup          shared.Message = 51
+	StateGroup        shared.Message = 53
 	EchoRequest       shared.Message = 58
 	EchoResponse      shared.Message = 59
 
-	VendorLifx          = 1
-	ProductLifxOriginal = 1
+	VendorLifx = 1
+
+	ProductLifxOriginal uint32 = 1
+	ProductLifxColor650 uint32 = 2
+	ProductLifxWhite800 uint32 = 3
 )
 
 type responseMap map[uint8]packet.Chan
@@ -56,6 +62,10 @@ type GenericDevice interface {
 	SetSeen(time.Time)
 	SetStatePower(*packet.Packet) error
 	SetStateLabel(*packet.Packet) error
+	SetStateLocation(*packet.Packet) error
+	SetStateGroup(*packet.Packet) error
+	GetLocation() (string, error)
+	GetGroup() (string, error)
 }
 
 type Device struct {
@@ -64,6 +74,9 @@ type Device struct {
 	power           uint16
 	label           string
 	hardwareVersion stateVersion
+
+	locationID string
+	groupID    string
 
 	sequence      uint8
 	requestSocket *net.UDPConn
@@ -105,6 +118,20 @@ type payloadPower struct {
 
 type payloadLabel struct {
 	Label [32]byte `struc:"little"`
+}
+
+func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool) {
+	d.address = addr
+	d.requestSocket = requestSocket
+	d.timeout = timeout
+	d.retryInterval = retryInterval
+	d.reliable = reliable
+	d.limiter = time.NewTimer(shared.RateLimit)
+	d.responseMap = make(responseMap)
+	d.doneMap = make(doneMap)
+	d.responseInput = make(packet.Chan, 32)
+	d.subscriptions = make(map[string]*common.Subscription)
+	d.quitChan = make(chan bool)
 }
 
 func (d *Device) ID() uint64 {
@@ -152,13 +179,45 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&l); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got label (%v): %+v\n", d.id, d.label)
+	common.Log.Debugf("Got label (%v): %+v\n", d.id, l.Label)
 	newLabel := stripNull(string(l.Label[:]))
 	if newLabel != d.label {
 		d.label = newLabel
 		if err := d.publish(common.EventUpdateLabel{Label: d.label}); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (d *Device) SetStateLocation(pkt *packet.Packet) error {
+	l := new(Location)
+	if err := l.Parse(pkt); err != nil {
+		return err
+	}
+	common.Log.Debugf("Got location (%v): %+v (%+v)\n", d.id, l.ID(), l.GetLabel())
+	newLocation := l.ID()
+	if newLocation != d.locationID {
+		d.locationID = newLocation
+		// TODO: Work out what to notify on without causing protocol version
+		// dependency
+	}
+
+	return nil
+}
+
+func (d *Device) SetStateGroup(pkt *packet.Packet) error {
+	l := new(Group)
+	if err := l.Parse(pkt); err != nil {
+		return err
+	}
+	common.Log.Debugf("Got group (%v): %+v (%+v)\n", d.id, l.ID(), l.GetLabel())
+	newGroup := l.ID()
+	if newGroup != d.groupID {
+		d.groupID = newGroup
+		// TODO: Work out what to notify on without causing protocol version
+		// dependency
 	}
 
 	return nil
@@ -171,7 +230,7 @@ func (d *Device) GetLabel() (string, error) {
 
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetLabel)
-	req, err := d.Send(pkt, false, true)
+	req, err := d.Send(pkt, d.reliable, true)
 	if err != nil {
 		return ``, err
 	}
@@ -205,8 +264,14 @@ func (d *Device) SetLabel(label string) error {
 	}
 
 	common.Log.Debugf("Setting label on %v: %v\n", d.id, label)
-	if _, err := d.Send(pkt, false, false); err != nil {
+	req, err := d.Send(pkt, d.reliable, false)
+	if err != nil {
 		return err
+	}
+	if d.reliable {
+		// Wait for ack
+		<-req
+		common.Log.Debugf("Setting label on %v acknowledged\n", d.id)
 	}
 
 	d.label = label
@@ -224,7 +289,9 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 	common.Log.Debugf("Got power (%v): %+v\n", d.id, d.power)
 
 	if d.power != p.Level {
+		d.Lock()
 		d.power = p.Level
+		d.Unlock()
 		if err := d.publish(common.EventUpdatePower{Power: d.power > 0}); err != nil {
 			return err
 		}
@@ -234,12 +301,15 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 }
 
 func (d *Device) GetPower() (bool, error) {
-	if d.power != 0 {
+	d.RLock()
+	state := d.power
+	d.RUnlock()
+	if state != 0 {
 		return true, nil
 	}
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetPower)
-	req, err := d.Send(pkt, false, true)
+	req, err := d.Send(pkt, d.reliable, true)
 	if err != nil {
 		return false, err
 	}
@@ -275,8 +345,14 @@ func (d *Device) SetPower(state bool) error {
 	}
 
 	common.Log.Debugf("Setting power state on %v: %v\n", d.id, state)
-	if _, err := d.Send(pkt, false, false); err != nil {
+	req, err := d.Send(pkt, d.reliable, false)
+	if err != nil {
 		return err
+	}
+	if d.reliable {
+		// Wait for ack
+		<-req
+		common.Log.Debugf("Setting power state on %v acknowledged\n", d.id)
 	}
 
 	d.power = p.Level
@@ -284,6 +360,58 @@ func (d *Device) SetPower(state bool) error {
 		return err
 	}
 	return nil
+}
+
+func (d *Device) GetLocation() (ret string, err error) {
+	if d.locationID != ret {
+		return d.locationID, nil
+	}
+
+	pkt := packet.New(d.address, d.requestSocket)
+	pkt.SetType(GetLocation)
+	req, err := d.Send(pkt, d.reliable, true)
+	if err != nil {
+		return ret, err
+	}
+
+	common.Log.Debugf("Waiting for location (%v)\n", d.id)
+	pktResponse := <-req
+	if pktResponse.Error != nil {
+		return ret, err
+	}
+
+	err = d.SetStateLocation(&pktResponse.Result)
+	if err != nil {
+		return ret, err
+	}
+
+	return d.locationID, nil
+}
+
+func (d *Device) GetGroup() (ret string, err error) {
+	if d.groupID != ret {
+		return d.groupID, nil
+	}
+
+	pkt := packet.New(d.address, d.requestSocket)
+	pkt.SetType(GetGroup)
+	req, err := d.Send(pkt, d.reliable, true)
+	if err != nil {
+		return ret, err
+	}
+
+	common.Log.Debugf("Waiting for group (%v)\n", d.id)
+	pktResponse := <-req
+	if pktResponse.Error != nil {
+		return ret, err
+	}
+
+	err = d.SetStateGroup(&pktResponse.Result)
+	if err != nil {
+		return ret, err
+	}
+
+	return d.groupID, nil
 }
 
 func (d *Device) GetHardwareVendor() (uint32, error) {
@@ -317,7 +445,7 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetVersion)
-	req, err := d.Send(pkt, false, true)
+	req, err := d.Send(pkt, d.reliable, true)
 	if err != nil {
 		return 0, err
 	}
@@ -353,11 +481,6 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 	// Rate limiter
 	<-d.limiter.C
-
-	// Reliable forces ack
-	if d.reliable {
-		ackRequired = true
-	}
 
 	// Broadcast vs direct
 	if d.id == 0 {
@@ -415,10 +538,9 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						if pktResponse.Result.GetType() == Acknowledgement {
 							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", seq, d.ID())
 							ticker.Stop()
-							if !responseRequired {
-								return
+							if responseRequired {
+								continue
 							}
-							continue
 						}
 						proxyChan <- pktResponse
 						return
@@ -458,11 +580,24 @@ func (d *Device) SetSeen(seen time.Time) {
 	d.Unlock()
 }
 
+// Close cleans up Device resources
 func (d *Device) Close() error {
-	common.Log.Debugf("Closing device %v", d.id)
+	for _, sub := range d.subscriptions {
+		if err := sub.Close(); err != nil {
+			return err
+		}
+	}
+
 	d.Lock()
-	d.quitChan <- true
-	d.Unlock()
+	defer d.Unlock()
+
+	select {
+	case <-d.quitChan:
+		common.Log.Warnf(`device already closed`)
+		return common.ErrClosed
+	default:
+		close(d.quitChan)
+	}
 
 	return nil
 }
@@ -533,19 +668,8 @@ func (d *Device) publish(event interface{}) error {
 }
 
 func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool, pkt *packet.Packet) (*Device, error) {
-	d := &Device{
-		address:       addr,
-		requestSocket: requestSocket,
-		responseMap:   make(responseMap),
-		doneMap:       make(doneMap),
-		responseInput: make(packet.Chan, 32),
-		subscriptions: make(map[string]*common.Subscription),
-		quitChan:      make(chan bool),
-		timeout:       timeout,
-		retryInterval: retryInterval,
-		reliable:      reliable,
-		limiter:       time.NewTimer(shared.RateLimit),
-	}
+	d := new(Device)
+	d.init(addr, requestSocket, timeout, retryInterval, reliable)
 
 	if pkt != nil {
 		d.id = pkt.Target
@@ -560,8 +684,4 @@ func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, 
 	go d.handler()
 
 	return d, nil
-}
-
-func stripNull(s string) string {
-	return strings.Replace(s, string(0), ``, -1)
 }

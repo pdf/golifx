@@ -51,20 +51,26 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 	common.Log.Debugf("Got light state (%v): %+v\n", l.id, s)
 
 	if l.color != s.Color {
+		l.Lock()
 		l.color = s.Color
+		l.Unlock()
 		if err := l.publish(common.EventUpdateColor{Color: l.color}); err != nil {
 			return err
 		}
 	}
 	if l.power != s.Power {
+		l.Lock()
 		l.power = s.Power
+		l.Unlock()
 		if err := l.publish(common.EventUpdatePower{Power: l.power > 0}); err != nil {
 			return err
 		}
 	}
 	newLabel := stripNull(string(s.Label[:]))
 	if newLabel != l.label {
+		l.Lock()
 		l.label = newLabel
+		l.Unlock()
 		if err := l.publish(common.EventUpdateLabel{Label: l.label}); err != nil {
 			return err
 		}
@@ -76,7 +82,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 func (l *Light) Get() error {
 	pkt := packet.New(l.address, l.requestSocket)
 	pkt.SetType(Get)
-	req, err := l.Send(pkt, false, true)
+	req, err := l.Send(pkt, l.reliable, true)
 	if err != nil {
 		return err
 	}
@@ -113,10 +119,16 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 	if err := pkt.SetPayload(p); err != nil {
 		return err
 	}
-	_, err := l.Send(pkt, false, false)
+	req, err := l.Send(pkt, l.reliable, false)
 	if err != nil {
 		return err
 	}
+	if l.reliable {
+		// Wait for ack
+		<-req
+		common.Log.Debugf("Setting color on %v acknowledged\n", l.id)
+	}
+
 	l.color = color
 	if err := l.publish(common.EventUpdateColor{Color: l.color}); err != nil {
 		return err
@@ -126,7 +138,10 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 }
 
 func (l *Light) GetColor() (common.Color, error) {
-	return l.color, nil
+	l.RLock()
+	color := l.color
+	l.RUnlock()
+	return color, nil
 }
 
 func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
@@ -147,11 +162,19 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	}
 
 	common.Log.Debugf("Setting power state on %v: %v\n", l.id, state)
-	if _, err := l.Send(pkt, false, false); err != nil {
+	req, err := l.Send(pkt, l.reliable, false)
+	if err != nil {
 		return err
 	}
+	if l.reliable {
+		// Wait for ack
+		<-req
+		common.Log.Debugf("Setting power state on %v acknowledged\n", l.id)
+	}
 
+	l.Lock()
 	l.power = p.Level
+	l.Unlock()
 	if err := l.publish(common.EventUpdatePower{Power: l.power > 0}); err != nil {
 		return err
 	}

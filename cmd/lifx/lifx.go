@@ -51,6 +51,7 @@ func init() {
 	app.PersistentFlags().StringVarP(&flagLogLevel, `log-level`, `L`, `info`, `log level, one of: [debug,info,warn,error]`)
 
 	app.AddCommand(cmdLight)
+	app.AddCommand(cmdGroup)
 	app.AddCommand(cmdGenerateBashComp)
 	app.AddCommand(cmdGenerateDocs)
 }
