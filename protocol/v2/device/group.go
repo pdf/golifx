@@ -2,6 +2,7 @@ package device
 
 import (
 	"encoding/base64"
+	"strings"
 	"sync"
 	"time"
 
@@ -313,7 +314,10 @@ func (g *Group) Parse(pkt *packet.Packet) error {
 	if shouldUpdate {
 		g.Lock()
 		g.id = s.ID
-		g.idEncoded = base64.RawURLEncoding.EncodeToString(s.ID[:])
+		g.idEncoded = strings.Replace(
+			base64.URLEncoding.EncodeToString(s.ID[:]),
+			`=`, ``, -1,
+		)
 		g.updatedAt = s.UpdatedAt
 		if g.label != s.Label {
 			g.label = s.Label
