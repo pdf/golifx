@@ -77,14 +77,17 @@ func (p *V2) init() error {
 
 	p.Lock()
 	defer p.Unlock()
-	socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{Port: shared.DefaultPort})
+	if p.Port == 0 {
+		p.Port = shared.DefaultPort
+	}
+	socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{Port: p.Port})
 	if err != nil {
 		return err
 	}
 	p.socket = socket
 	addr := net.UDPAddr{
 		IP:   net.IPv4(255, 255, 255, 255),
-		Port: shared.DefaultPort,
+		Port: p.Port,
 	}
 	broadcastDev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, false, nil)
 	if err != nil {
