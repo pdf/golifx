@@ -33,7 +33,7 @@ type of device you will interact with.
 ```go
 const (
 	// VERSION of this library
-	VERSION = `0.1.1`
+	VERSION = `0.2.0`
 )
 ```
 
@@ -103,10 +103,35 @@ the device.
 #### func (*Client) GetDevices
 
 ```go
-func (c *Client) GetDevices() ([]common.Device, error)
+func (c *Client) GetDevices() (devices []common.Device, err error)
 ```
 GetDevices returns a slice of all devices known to the client, or
 common.ErrNotFound if no devices are currently known.
+
+#### func (*Client) GetGroupByID
+
+```go
+func (c *Client) GetGroupByID(id string) (common.Group, error)
+```
+GetGroupByID looks up a group by it's id and returns a common.Group. May return
+a common.ErrNotFound error if the lookup times out without finding the group.
+
+#### func (*Client) GetGroupByLabel
+
+```go
+func (c *Client) GetGroupByLabel(label string) (common.Group, error)
+```
+GetGroupByLabel looks up a group by it's label and returns a common.Group. May
+return a common.ErrNotFound error if the lookup times out without finding the
+group.
+
+#### func (*Client) GetGroups
+
+```go
+func (c *Client) GetGroups() (groups []common.Group, err error)
+```
+GetGroups returns a slice of all groups known to the client, or
+common.ErrNotFound if no groups are currently known.
 
 #### func (*Client) GetLightByID
 
@@ -133,6 +158,32 @@ func (c *Client) GetLights() (lights []common.Light, err error)
 ```
 GetLights returns a slice of all lights known to the client, or
 common.ErrNotFound if no lights are currently known.
+
+#### func (*Client) GetLocationByID
+
+```go
+func (c *Client) GetLocationByID(id string) (common.Location, error)
+```
+GetLocationByID looks up a location by it's id and returns a common.Location.
+May return a common.ErrNotFound error if the lookup times out without finding
+the location.
+
+#### func (*Client) GetLocationByLabel
+
+```go
+func (c *Client) GetLocationByLabel(label string) (common.Location, error)
+```
+GetLocationByLabel looks up a location by it's label and returns a
+common.Location. May return a common.ErrNotFound error if the lookup times out
+without finding the location.
+
+#### func (*Client) GetLocations
+
+```go
+func (c *Client) GetLocations() (locations []common.Location, err error)
+```
+GetLocations returns a slice of all locations known to the client, or
+common.ErrNotFound if no locations are currently known.
 
 #### func (*Client) GetRetryInterval
 
@@ -211,7 +262,6 @@ func (c *Client) SetTimeout(timeout time.Duration)
 SetTimeout sets the time that client operations wait for results before
 returning an error. The special value of 0 may be set to disable timeouts, and
 all operations will wait indefinitely, but this is not recommended.
-
 # common
 --
     import "github.com/pdf/golifx/common"
@@ -279,7 +329,7 @@ type Color struct {
 ```
 
 Color is used to represent the color and color temperature of a light. The color
-is represented as an HSB (Hue, Saturation, Brightness) value. The color
+is represented as a 48-bit HSB (Hue, Saturation, Brightness) value. The color
 temperature is represented in K (Kelvin) and is used to adjust the warmness /
 coolness of a white light, which is most obvious when saturation is close zero.
 
@@ -287,7 +337,6 @@ coolness of a white light, which is most obvious when saturation is close zero.
 
 ```go
 type Device interface {
-	SubscriptionTarget
 	// Returns the ID for the device
 	ID() uint64
 
@@ -299,6 +348,9 @@ type Device interface {
 	GetPower() (bool, error)
 	// Sets the power state of the device, true for on, false for off
 	SetPower(state bool) error
+
+	// Device is a SubscriptionTarget
+	SubscriptionTarget
 }
 ```
 
@@ -329,7 +381,30 @@ type EventExpiredDevice struct {
 }
 ```
 
-EventExpiredDevice is emitted by a Client when a Device is no longer known
+EventExpiredDevice is emitted by a Client or Group when a Device is no longer
+known
+
+#### type EventExpiredGroup
+
+```go
+type EventExpiredGroup struct {
+	Group Group
+}
+```
+
+EventExpiredGroup is emitted by a Client or Group when a Group is no longer
+known
+
+#### type EventExpiredLocation
+
+```go
+type EventExpiredLocation struct {
+	Location Location
+}
+```
+
+EventExpiredLocation is emitted by a Client or Group when a Location is no
+longer known
 
 #### type EventNewDevice
 
@@ -339,7 +414,27 @@ type EventNewDevice struct {
 }
 ```
 
-EventNewDevice is emitted by a Client when it discovers a new Device
+EventNewDevice is emitted by a Client or Group when it discovers a new Device
+
+#### type EventNewGroup
+
+```go
+type EventNewGroup struct {
+	Group Group
+}
+```
+
+EventNewGroup is emitted by a Client when it discovers a new Group
+
+#### type EventNewLocation
+
+```go
+type EventNewLocation struct {
+	Location Location
+}
+```
+
+EventNewLocation is emitted by a Client when it discovers a new Location
 
 #### type EventUpdateColor
 
@@ -349,7 +444,7 @@ type EventUpdateColor struct {
 }
 ```
 
-EventUpdateColor is emitted by a Light when it's Color is updated
+EventUpdateColor is emitted by a Light or Group when its Color is updated
 
 #### type EventUpdateLabel
 
@@ -359,7 +454,7 @@ type EventUpdateLabel struct {
 }
 ```
 
-EventUpdateLabel is emitted by a Device when it's label is updated
+EventUpdateLabel is emitted by a Device or Group when its label is updated
 
 #### type EventUpdatePower
 
@@ -369,14 +464,54 @@ type EventUpdatePower struct {
 }
 ```
 
-EventUpdatePower is emitted by a Device when it's power state is updated
+EventUpdatePower is emitted by a Device or Group when its power state is updated
+
+#### type Group
+
+```go
+type Group interface {
+	// ID returns a base64 encoding of the device ID
+	ID() string
+
+	// Label returns the label for the group
+	GetLabel() string
+
+	// Devices returns the devices in the group
+	Devices() []Device
+
+	// Lights returns the lights in the group
+	Lights() []Light
+
+	// Returns the power state of the group, true if any members are on, false
+	// if all members off. Returns error on communication errors.
+	GetPower() (bool, error)
+
+	// Returns the average color of lights in the group. Returns error on
+	// communication error.
+	GetColor() (Color, error)
+
+	// SetColor requests a change of color for all devices in the group that
+	// support color changes, transitioning over the specified duration
+	SetColor(color Color, duration time.Duration) error
+	// SetPower sets the power of devices in the group that support power
+	// changes, state is true for on, false for off.
+	SetPower(state bool) error
+	// SetPowerDuration sets the power of devices in the group that support
+	// power changes, transitioning over the speficied duration, state is true
+	// for on, false for off.
+	SetPowerDuration(state bool, duration time.Duration) error
+
+	// Device is a SubscriptionTarget
+	SubscriptionTarget
+}
+```
+
+Group represents a group of LIFX devices
 
 #### type Light
 
 ```go
 type Light interface {
-	// A light is a superset of the Device interface
-	Device
 	// SetColor changes the color of the light, transitioning over the specified
 	// duration
 	SetColor(color Color, duration time.Duration) error
@@ -385,10 +520,24 @@ type Light interface {
 	// SetPowerDuration sets the power of the light, transitioning over the
 	// speficied duration, state is true for on, false for off.
 	SetPowerDuration(state bool, duration time.Duration) error
+
+	// Light is a superset of the Device interface
+	Device
 }
 ```
 
 Light represents a LIFX light device
+
+#### type Location
+
+```go
+type Location interface {
+	// Location is a group
+	Group
+}
+```
+
+Location represents a locality-based group of LIFX devices
 
 #### type Logger
 
@@ -519,7 +668,7 @@ NewSubscription returns a *Subscription attached to the specified target
 #### func (*Subscription) Close
 
 ```go
-func (s *Subscription) Close()
+func (s *Subscription) Close() error
 ```
 Close cleans up resources and notifies the target that the subscription should
 no longer be used. It is important to close subscriptions when you are done with
