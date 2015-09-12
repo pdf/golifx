@@ -222,7 +222,7 @@ func (g *Group) SetColor(color common.Color, duration time.Duration) error {
 
 	for _, light := range lights {
 		wg.Add(1)
-		go func() {
+		go func(light common.Light) {
 			e := light.SetColor(color, duration)
 			errMutex.Lock()
 			if err == nil && e != nil {
@@ -230,7 +230,7 @@ func (g *Group) SetColor(color common.Color, duration time.Duration) error {
 			}
 			errMutex.Unlock()
 			wg.Done()
-		}()
+		}(light)
 	}
 
 	wg.Wait()
@@ -244,23 +244,23 @@ func (g *Group) SetPower(state bool) error {
 		errMutex sync.Mutex
 	)
 
-	lights := g.Lights()
+	devices := g.Devices()
 
-	if len(lights) == 0 {
+	if len(devices) == 0 {
 		return nil
 	}
 
-	for _, light := range lights {
+	for _, device := range devices {
 		wg.Add(1)
-		go func() {
-			e := light.SetPower(state)
+		go func(device common.Device) {
+			e := device.SetPower(state)
 			errMutex.Lock()
 			if err == nil && e != nil {
 				err = e
 			}
 			errMutex.Unlock()
 			wg.Done()
-		}()
+		}(device)
 	}
 
 	wg.Wait()
@@ -282,7 +282,7 @@ func (g *Group) SetPowerDuration(state bool, duration time.Duration) error {
 
 	for _, light := range lights {
 		wg.Add(1)
-		go func() {
+		go func(light common.Light) {
 			e := light.SetPowerDuration(state, duration)
 			errMutex.Lock()
 			if err == nil && e != nil {
@@ -290,7 +290,7 @@ func (g *Group) SetPowerDuration(state bool, duration time.Duration) error {
 			}
 			errMutex.Unlock()
 			wg.Done()
-		}()
+		}(light)
 	}
 
 	wg.Wait()
