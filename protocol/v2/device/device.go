@@ -46,9 +46,10 @@ const (
 
 	VendorLifx = 1
 
-	ProductLifxOriginal uint32 = 1
-	ProductLifxColor650 uint32 = 2
-	ProductLifxWhite800 uint32 = 3
+	ProductLifxOriginal            uint32 = 1
+	ProductLifxColor650            uint32 = 2
+	ProductLifxWhite800LowVoltage  uint32 = 3
+	ProductLifxWhite800HighVoltage uint32 = 4
 )
 
 type responseMap map[uint8]packet.Chan

@@ -485,7 +485,7 @@ func (p *V2) addDevice(dev *device.Device) {
 	}
 	if vendor == device.VendorLifx {
 		switch product {
-		case device.ProductLifxOriginal, device.ProductLifxColor650, device.ProductLifxWhite800:
+		case device.ProductLifxOriginal, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage:
 			p.Lock()
 			// Need to figure if there's a way to do this without being racey on the
 			// lock inside the dev
