@@ -46,7 +46,7 @@ const (
 
 	VendorLifx = 1
 
-	ProductLifxOriginal            uint32 = 1
+	ProductLifxOriginal1000        uint32 = 1
 	ProductLifxColor650            uint32 = 3
 	ProductLifxWhite800LowVoltage  uint32 = 10
 	ProductLifxWhite800HighVoltage uint32 = 11
