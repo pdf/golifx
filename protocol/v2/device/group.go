@@ -115,11 +115,8 @@ func (g *Group) addDeviceSubscription(dev GenericDevice) error {
 						continue
 					}
 				case common.EventUpdatePower:
-					state, err := g.GetPower()
-					if err != nil {
-						continue
-					}
-					err = g.publish(common.EventUpdatePower{Power: state})
+					ev := event.(common.EventUpdatePower)
+					err = g.publish(common.EventUpdatePower{Power: ev.Power})
 					if err != nil {
 						continue
 					}
