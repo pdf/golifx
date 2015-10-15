@@ -106,7 +106,7 @@ func (g *Group) addDeviceSubscription(dev GenericDevice) error {
 			case event := <-events:
 				switch event.(type) {
 				case common.EventUpdateColor:
-					color, err := g.GetColor()
+					color := g.CachedColor()
 					if err != nil {
 						continue
 					}
@@ -115,7 +115,7 @@ func (g *Group) addDeviceSubscription(dev GenericDevice) error {
 						continue
 					}
 				case common.EventUpdatePower:
-					state, err := g.GetPower()
+					state := g.CachedPower()
 					if err != nil {
 						continue
 					}
@@ -151,6 +151,15 @@ func (g *Group) RemoveDevice(dev GenericDevice) error {
 }
 
 func (g *Group) GetPower() (bool, error) {
+	return g.getPower(false)
+}
+
+func (g *Group) CachedPower() bool {
+	p, _ := g.getPower(true)
+	return p
+}
+
+func (g *Group) getPower(cached bool) (bool, error) {
 	var state uint
 	devices := g.Devices()
 
@@ -159,9 +168,17 @@ func (g *Group) GetPower() (bool, error) {
 	}
 
 	for _, dev := range devices {
-		p, err := dev.GetPower()
-		if err != nil {
-			return false, err
+		var (
+			p   bool
+			err error
+		)
+		if cached {
+			p = dev.CachedPower()
+		} else {
+			p, err = dev.GetPower()
+			if err != nil {
+				return false, err
+			}
 		}
 		if p {
 			state += 1
@@ -177,6 +194,15 @@ func (g *Group) GetPower() (bool, error) {
 // I doubt this is accurate as color theory, but it's good enough for this
 // use-case.
 func (g *Group) GetColor() (common.Color, error) {
+	return g.getColor(false)
+}
+
+func (g *Group) CachedColor() common.Color {
+	c, _ := g.getColor(true)
+	return c
+}
+
+func (g *Group) getColor(cached bool) (common.Color, error) {
 	var (
 		hueSum, satSum, brightSum, kelvSum uint64
 		color                              common.Color
@@ -189,9 +215,17 @@ func (g *Group) GetColor() (common.Color, error) {
 	}
 
 	for _, light := range lights {
-		c, err := light.GetColor()
-		if err != nil {
-			return color, err
+		var (
+			c   common.Color
+			err error
+		)
+		if cached {
+			c = light.CachedColor()
+		} else {
+			c, err = light.GetColor()
+			if err != nil {
+				return color, err
+			}
 		}
 		hueSum += uint64(c.Hue)
 		satSum += uint64(c.Saturation)

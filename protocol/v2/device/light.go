@@ -138,10 +138,17 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 }
 
 func (l *Light) GetColor() (common.Color, error) {
+	if err := l.Get(); err != nil {
+		return common.Color{}, err
+	}
+	return l.CachedColor(), nil
+}
+
+func (l *Light) CachedColor() common.Color {
 	l.RLock()
 	color := l.color
 	l.RUnlock()
-	return color, nil
+	return color
 }
 
 func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {

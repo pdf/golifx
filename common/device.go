@@ -7,13 +7,17 @@ type Device interface {
 	// Returns the ID for the device
 	ID() uint64
 
-	// Returns the label for the device
+	// GetLabel gets the label for the device
 	GetLabel() (string, error)
-	// Sets the label for the device
+	// SetLabel sets the label for the device
 	SetLabel(label string) error
-	// Returns the power state of the device, true for on, false for off
+	// GetPower requests the current power state of the device, true for on,
+	// false for off
 	GetPower() (bool, error)
-	// Sets the power state of the device, true for on, false for off
+	// CachedPower returns the last known power state of the device, true for
+	// on, false for off
+	CachedPower() bool
+	// SetPower sets the power state of the device, true for on, false for off
 	SetPower(state bool) error
 
 	// Device is a SubscriptionTarget
@@ -25,8 +29,10 @@ type Light interface {
 	// SetColor changes the color of the light, transitioning over the specified
 	// duration
 	SetColor(color Color, duration time.Duration) error
-	// GetColor returns the current color of the light
+	// GetColor requests the current color of the light
 	GetColor() (Color, error)
+	// CachedColor returns the last known color of the light
+	CachedColor() Color
 	// SetPowerDuration sets the power of the light, transitioning over the
 	// speficied duration, state is true for on, false for off.
 	SetPowerDuration(state bool, duration time.Duration) error

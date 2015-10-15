@@ -302,12 +302,6 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 }
 
 func (d *Device) GetPower() (bool, error) {
-	d.RLock()
-	state := d.power
-	d.RUnlock()
-	if state != 0 {
-		return true, nil
-	}
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetPower)
 	req, err := d.Send(pkt, d.reliable, true)
@@ -327,6 +321,13 @@ func (d *Device) GetPower() (bool, error) {
 	}
 
 	return d.power > 0, nil
+}
+
+func (d *Device) CachedPower() bool {
+	d.RLock()
+	state := d.power
+	d.RUnlock()
+	return state != 0
 }
 
 func (d *Device) SetPower(state bool) error {
