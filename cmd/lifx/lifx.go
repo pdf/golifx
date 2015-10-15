@@ -41,6 +41,12 @@ var (
 		Short: "generate markdown documentation at <path>",
 		Run:   generateDocs,
 	}
+
+	cmdVersion = &cobra.Command{
+		Use:   `version`,
+		Short: "output the lifx version",
+		Run:   version,
+	}
 )
 
 func init() {
@@ -54,6 +60,7 @@ func init() {
 	app.AddCommand(cmdGroup)
 	app.AddCommand(cmdGenerateBashComp)
 	app.AddCommand(cmdGenerateDocs)
+	app.AddCommand(cmdVersion)
 }
 
 func main() {
@@ -115,6 +122,10 @@ func generateDocs(c *cobra.Command, args []string) {
 		path += string(os.PathSeparator)
 	}
 	cobra.GenMarkdownTree(app, path)
+}
+
+func version(c *cobra.Command, args []string) {
+	fmt.Printf("lifx version %s\n", golifx.VERSION)
 }
 
 func usage(c *cobra.Command, args []string) {
