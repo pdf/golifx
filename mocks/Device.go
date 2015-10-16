@@ -69,6 +69,18 @@ func (_m *Device) GetPower() (bool, error) {
 
 	return r0, r1
 }
+func (_m *Device) CachedPower() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
 func (_m *Device) SetPower(state bool) error {
 	ret := _m.Called(state)
 

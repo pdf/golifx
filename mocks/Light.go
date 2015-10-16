@@ -41,6 +41,18 @@ func (_m *Light) GetColor() (common.Color, error) {
 
 	return r0, r1
 }
+func (_m *Light) CachedColor() common.Color {
+	ret := _m.Called()
+
+	var r0 common.Color
+	if rf, ok := ret.Get(0).(func() common.Color); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(common.Color)
+	}
+
+	return r0
+}
 func (_m *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	ret := _m.Called(state, duration)
 
