@@ -29,7 +29,7 @@ type V2 struct {
 	subscriptions map[string]*common.Subscription
 	locations     map[string]*device.Location
 	groups        map[string]*device.Group
-	quitChan      chan bool
+	quitChan      chan struct{}
 	sync.RWMutex
 }
 
@@ -98,7 +98,7 @@ func (p *V2) init() error {
 	p.locations = make(map[string]*device.Location)
 	p.groups = make(map[string]*device.Group)
 	p.subscriptions = make(map[string]*common.Subscription)
-	p.quitChan = make(chan bool, 1)
+	p.quitChan = make(chan struct{})
 	go p.dispatcher()
 	p.initialized = true
 

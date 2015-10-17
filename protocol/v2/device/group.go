@@ -23,14 +23,14 @@ type Group struct {
 	updatedAt     uint64
 	devices       map[uint64]GenericDevice
 	subscriptions map[string]*common.Subscription
-	quitChan      chan bool
+	quitChan      chan struct{}
 	sync.RWMutex
 }
 
 func (g *Group) init() {
 	g.devices = make(map[uint64]GenericDevice)
 	g.subscriptions = make(map[string]*common.Subscription)
-	g.quitChan = make(chan bool)
+	g.quitChan = make(chan struct{})
 }
 
 func (g *Group) ID() string {

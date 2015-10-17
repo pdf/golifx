@@ -53,7 +53,7 @@ const (
 )
 
 type responseMap map[uint8]packet.Chan
-type doneMap map[uint8]chan bool
+type doneMap map[uint8]chan struct{}
 
 type GenericDevice interface {
 	common.Device
@@ -85,7 +85,7 @@ type Device struct {
 	doneMap       doneMap
 	responseInput packet.Chan
 	subscriptions map[string]*common.Subscription
-	quitChan      chan bool
+	quitChan      chan struct{}
 	timeout       *time.Duration
 	retryInterval *time.Duration
 	limiter       *time.Timer
@@ -132,7 +132,7 @@ func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *ti
 	d.doneMap = make(doneMap)
 	d.responseInput = make(packet.Chan, 32)
 	d.subscriptions = make(map[string]*common.Subscription)
-	d.quitChan = make(chan bool)
+	d.quitChan = make(chan struct{})
 }
 
 func (d *Device) ID() uint64 {
@@ -499,7 +499,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 		}
 		if ackRequired || responseRequired {
 			inputChan := make(packet.Chan)
-			doneChan := make(chan bool)
+			doneChan := make(chan struct{})
 
 			d.Lock()
 			d.sequence++
@@ -609,7 +609,7 @@ func (d *Device) handler() {
 		pktResponse packet.Response
 		ok          bool
 		ch          packet.Chan
-		done        chan bool
+		done        chan struct{}
 	)
 	for {
 

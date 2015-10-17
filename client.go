@@ -12,7 +12,7 @@ import (
 // NewClient() to obtain a Client instance.
 type Client struct {
 	discoveryInterval     time.Duration
-	quitChan              chan bool
+	quitChan              chan struct{}
 	protocol              common.Protocol
 	timeout               time.Duration
 	retryInterval         time.Duration
@@ -532,7 +532,7 @@ func (c *Client) SetDiscoveryInterval(interval time.Duration) error {
 	c.Lock()
 	if c.discoveryInterval != 0 {
 		for i := 0; i < cap(c.quitChan); i++ {
-			c.quitChan <- true
+			c.quitChan <- struct{}{}
 		}
 	}
 	c.discoveryInterval = interval

@@ -19,7 +19,7 @@ type SubscriptionTarget interface {
 // SubscriptionTarget, that will feed it with events
 type Subscription struct {
 	events   chan interface{}
-	quitChan chan bool
+	quitChan chan struct{}
 	id       uuid.UUID
 	target   SubscriptionTarget
 }
@@ -67,7 +67,7 @@ func (s *Subscription) Close() error {
 func NewSubscription(target SubscriptionTarget) *Subscription {
 	return &Subscription{
 		events:   make(chan interface{}, subscriptionChanSize),
-		quitChan: make(chan bool),
+		quitChan: make(chan struct{}),
 		id:       uuid.NewV4(),
 		target:   target,
 	}

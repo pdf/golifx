@@ -41,7 +41,7 @@ func NewClient(p common.Protocol) (*Client, error) {
 		timeout:               common.DefaultTimeout,
 		retryInterval:         common.DefaultRetryInterval,
 		internalRetryInterval: 10 * time.Millisecond,
-		quitChan:              make(chan bool, 2),
+		quitChan:              make(chan struct{}, 2),
 	}
 	p.SetClient(c)
 	err := c.discover()
