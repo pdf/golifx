@@ -50,6 +50,7 @@ const (
 	ProductLifxColor650            uint32 = 3
 	ProductLifxWhite800LowVoltage  uint32 = 10
 	ProductLifxWhite800HighVoltage uint32 = 11
+	ProductLifxColor1000           uint32 = 22
 )
 
 type responseMap map[uint8]packet.Chan
