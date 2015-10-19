@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"time"
 
@@ -47,6 +48,13 @@ var (
 		Short: "output the lifx version",
 		Run:   version,
 	}
+
+	cmdWatch = &cobra.Command{
+		Use:    `watch`,
+		Short:  "watch for events (hint: set log level to 'debug'), end with Ctrl+C",
+		PreRun: setupClient,
+		Run:    watch,
+	}
 )
 
 func init() {
@@ -61,6 +69,7 @@ func init() {
 	app.AddCommand(cmdGenerateBashComp)
 	app.AddCommand(cmdGenerateDocs)
 	app.AddCommand(cmdVersion)
+	app.AddCommand(cmdWatch)
 }
 
 func main() {
@@ -132,6 +141,13 @@ func usage(c *cobra.Command, args []string) {
 	if err := c.Usage(); err != nil {
 		logger.WithField(`error`, err).Fatalln(`Failed to print usage`)
 	}
+}
+
+func watch(c *cobra.Command, args []string) {
+	sig := make(chan os.Signal, 1)
+
+	signal.Notify(sig, os.Interrupt, os.Kill)
+	<-sig
 }
 
 func setLogger() {
