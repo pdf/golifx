@@ -87,7 +87,7 @@ CloseSubscription is a callback for handling the closing of subscriptions.
 ```go
 func (c *Client) GetDeviceByID(id uint64) (common.Device, error)
 ```
-GetDeviceByID looks up a device by it's id and returns a common.Device. May
+GetDeviceByID looks up a device by its `id` and returns a common.Device. May
 return a common.ErrNotFound error if the lookup times out without finding the
 device.
 
@@ -96,7 +96,7 @@ device.
 ```go
 func (c *Client) GetDeviceByLabel(label string) (common.Device, error)
 ```
-GetDeviceByLabel looks up a device by it's label and returns a common.Device.
+GetDeviceByLabel looks up a device by its `label` and returns a common.Device.
 May return a common.ErrNotFound error if the lookup times out without finding
 the device.
 
@@ -113,7 +113,7 @@ common.ErrNotFound if no devices are currently known.
 ```go
 func (c *Client) GetGroupByID(id string) (common.Group, error)
 ```
-GetGroupByID looks up a group by it's id and returns a common.Group. May return
+GetGroupByID looks up a group by its `id` and returns a common.Group. May return
 a common.ErrNotFound error if the lookup times out without finding the group.
 
 #### func (*Client) GetGroupByLabel
@@ -121,7 +121,7 @@ a common.ErrNotFound error if the lookup times out without finding the group.
 ```go
 func (c *Client) GetGroupByLabel(label string) (common.Group, error)
 ```
-GetGroupByLabel looks up a group by it's label and returns a common.Group. May
+GetGroupByLabel looks up a group by its `label` and returns a common.Group. May
 return a common.ErrNotFound error if the lookup times out without finding the
 group.
 
@@ -138,7 +138,7 @@ common.ErrNotFound if no groups are currently known.
 ```go
 func (c *Client) GetLightByID(id uint64) (light common.Light, err error)
 ```
-GetLightByID looks up a light by it's id and returns a common.Light. May return
+GetLightByID looks up a light by its `id` and returns a common.Light. May return
 a common.ErrNotFound error if the lookup times out without finding the light, or
 common.ErrDeviceInvalidType if the device exists but is not a light.
 
@@ -147,7 +147,7 @@ common.ErrDeviceInvalidType if the device exists but is not a light.
 ```go
 func (c *Client) GetLightByLabel(label string) (common.Light, error)
 ```
-GetLightByLabel looks up a light by it's label and returns a common.Light. May
+GetLightByLabel looks up a light by its `label` and returns a common.Light. May
 return a common.ErrNotFound error if the lookup times out without finding the
 light, or common.ErrDeviceInvalidType if the device exists but is not a light.
 
@@ -164,7 +164,7 @@ common.ErrNotFound if no lights are currently known.
 ```go
 func (c *Client) GetLocationByID(id string) (common.Location, error)
 ```
-GetLocationByID looks up a location by it's id and returns a common.Location.
+GetLocationByID looks up a location by its `id` and returns a common.Location.
 May return a common.ErrNotFound error if the lookup times out without finding
 the location.
 
@@ -173,7 +173,7 @@ the location.
 ```go
 func (c *Client) GetLocationByLabel(label string) (common.Location, error)
 ```
-GetLocationByLabel looks up a location by it's label and returns a
+GetLocationByLabel looks up a location by its `label` and returns a
 common.Location. May return a common.ErrNotFound error if the lookup times out
 without finding the location.
 
@@ -710,5 +710,5 @@ type SubscriptionTarget interface {
 }
 ```
 
-SubscriptionTarget defines the interface between a subscription and it's target
+SubscriptionTarget defines the interface between a subscription and its target
 object

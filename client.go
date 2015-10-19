@@ -93,7 +93,7 @@ func (c *Client) addGroup(group common.Group) error {
 	return nil
 }
 
-// removeLocationByID looks up a location by it's id and removes it from the
+// removeLocationByID looks up a location by its `id` and removes it from the
 // client's list of known locations, or returns common.ErrNotFound if the
 // location is not known at this time.
 func (c *Client) removeLocationByID(id string) error {
@@ -116,7 +116,7 @@ func (c *Client) removeLocationByID(id string) error {
 	return nil
 }
 
-// removeGroupByID looks up a group by it's id and removes it from the client's
+// removeGroupByID looks up a group by its `id` and removes it from the client's
 // list of known groups, or returns common.ErrNotFound if the group is not known
 // at this time.
 func (c *Client) removeGroupByID(id string) error {
@@ -139,7 +139,7 @@ func (c *Client) removeGroupByID(id string) error {
 	return nil
 }
 
-// removeDeviceByID looks up a device by it's id and removes it from the
+// removeDeviceByID looks up a device by its `id` and removes it from the
 // client's list of known devices, or returns common.ErrNotFound if the device
 // is not known at this time.
 func (c *Client) removeDeviceByID(id uint64) error {
@@ -177,7 +177,7 @@ func (c *Client) GetLocations() (locations []common.Location, err error) {
 	return locations, nil
 }
 
-// GetLocationByID looks up a location by it's id and returns a common.Location.
+// GetLocationByID looks up a location by its `id` and returns a common.Location.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the location.
 func (c *Client) GetLocationByID(id string) (common.Location, error) {
@@ -216,7 +216,7 @@ func (c *Client) GetLocationByID(id string) (common.Location, error) {
 	}
 }
 
-// GetLocationByLabel looks up a location by it's label and returns a
+// GetLocationByLabel looks up a location by its `label` and returns a
 // common.Location. May return a common.ErrNotFound error if the lookup times
 // out without finding the location.
 func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
@@ -270,7 +270,7 @@ func (c *Client) GetGroups() (groups []common.Group, err error) {
 	return groups, nil
 }
 
-// GetGroupByID looks up a group by it's id and returns a common.Group.
+// GetGroupByID looks up a group by its `id` and returns a common.Group.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the group.
 func (c *Client) GetGroupByID(id string) (common.Group, error) {
@@ -309,7 +309,7 @@ func (c *Client) GetGroupByID(id string) (common.Group, error) {
 	}
 }
 
-// GetGroupByLabel looks up a group by it's label and returns a common.Group.
+// GetGroupByLabel looks up a group by its `label` and returns a common.Group.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the group.
 func (c *Client) GetGroupByLabel(label string) (common.Group, error) {
@@ -363,7 +363,7 @@ func (c *Client) GetDevices() (devices []common.Device, err error) {
 	return devices, nil
 }
 
-// GetDeviceByID looks up a device by it's id and returns a common.Device.
+// GetDeviceByID looks up a device by its `id` and returns a common.Device.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
@@ -402,7 +402,7 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 	}
 }
 
-// GetDeviceByLabel looks up a device by it's label and returns a common.Device.
+// GetDeviceByLabel looks up a device by its `label` and returns a common.Device.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
@@ -467,7 +467,7 @@ func (c *Client) GetLights() (lights []common.Light, err error) {
 	return lights, nil
 }
 
-// GetLightByID looks up a light by it's id and returns a common.Light.
+// GetLightByID looks up a light by its `id` and returns a common.Light.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the light, or common.ErrDeviceInvalidType if the device exists but is not a
 // light.
@@ -485,7 +485,7 @@ func (c *Client) GetLightByID(id uint64) (light common.Light, err error) {
 	return light, nil
 }
 
-// GetLightByLabel looks up a light by it's label and returns a common.Light.
+// GetLightByLabel looks up a light by its `label` and returns a common.Light.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the light, or common.ErrDeviceInvalidType if the device exists but is not a
 // light.

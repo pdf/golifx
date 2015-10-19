@@ -8,7 +8,7 @@ import (
 
 const subscriptionChanSize = 16
 
-// SubscriptionTarget defines the interface between a subscription and it's
+// SubscriptionTarget defines the interface between a subscription and its
 // target object
 type SubscriptionTarget interface {
 	NewSubscription() (*Subscription, error)
