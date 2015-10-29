@@ -68,6 +68,7 @@ type GenericDevice interface {
 	SetStateGroup(*packet.Packet) error
 	GetLocation() (string, error)
 	GetGroup() (string, error)
+	ResetLimiter()
 }
 
 type Device struct {
@@ -479,6 +480,19 @@ func (d *Device) ResetLimiter() {
 	d.limiter.Reset(shared.RateLimit)
 }
 
+func (d *Device) resetLimiter(broadcast bool) {
+	if broadcast {
+		if err := d.publish(shared.EventRequestSent{}); err != nil {
+			common.Log.Warnf("Failed publishing EventRequestSent on dev %+v: %+v\n", d.id, err)
+		}
+	} else {
+		if err := d.publish(shared.EventBroadcastSent{}); err != nil {
+			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %+v: %+v\n", d.id, err)
+		}
+	}
+	d.ResetLimiter()
+}
+
 func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (packet.Chan, error) {
 	proxyChan := make(packet.Chan)
 
@@ -486,7 +500,8 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 	<-d.limiter.C
 
 	// Broadcast vs direct
-	if d.id == 0 {
+	broadcast := d.id == 0
+	if broadcast {
 		// Broadcast can't be reliable
 		ackRequired = false
 		pkt.SetTagged(true)
@@ -565,7 +580,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 	}
 
 	err := pkt.Write()
-	d.ResetLimiter()
+	d.resetLimiter(broadcast)
 
 	return proxyChan, err
 }

@@ -94,6 +94,11 @@ func (p *V2) init() error {
 		return err
 	}
 	p.broadcast = &device.Light{Device: *broadcastDev}
+	broadcastSub, err := p.broadcast.NewSubscription()
+	if err != nil {
+		return err
+	}
+	go p.broadcastLimiter(broadcastSub.Events())
 	p.devices = make(map[uint64]device.GenericDevice)
 	p.locations = make(map[string]*device.Location)
 	p.groups = make(map[string]*device.Group)
@@ -157,7 +162,9 @@ func (p *V2) Discover() error {
 						common.Log.Warnf("Failed removing extinct device '%d' from location (%v): %v", dev.ID(), locationID, err)
 					}
 					if len(location.Devices()) == 0 {
-						p.publish(common.EventExpiredLocation{Location: location})
+						if err := p.publish(common.EventExpiredLocation{Location: location}); err != nil {
+							common.Log.Warnf("Failed publishing expired event for device '%d'", dev.ID())
+						}
 					}
 				}
 			}
@@ -172,7 +179,9 @@ func (p *V2) Discover() error {
 						common.Log.Warnf("Failed removing extinct device '%d' from group (%v): %v", dev.ID(), groupID, err)
 					}
 					if len(group.Devices()) == 0 {
-						p.publish(common.EventExpiredGroup{Group: group})
+						if err := p.publish(common.EventExpiredGroup{Group: group}); err != nil {
+							common.Log.Warnf("Failed publishing expired event for group '%v'", groupID)
+						}
 					}
 				}
 			}
@@ -240,6 +249,10 @@ func (p *V2) Close() error {
 		}
 	}
 
+	if err := p.broadcast.Close(); err != nil {
+		return err
+	}
+
 	select {
 	case <-p.quitChan:
 		common.Log.Warnf(`protocol already closed`)
@@ -249,6 +262,26 @@ func (p *V2) Close() error {
 	}
 
 	return nil
+}
+
+func (p *V2) broadcastLimiter(events <-chan interface{}) {
+	for {
+		select {
+		case <-p.quitChan:
+			return
+		case event := <-events:
+			switch event.(type) {
+			case shared.EventBroadcastSent:
+				p.RLock()
+				for _, dev := range p.devices {
+					dev.ResetLimiter()
+				}
+				p.RUnlock()
+			case shared.EventRequestSent:
+				p.broadcast.ResetLimiter()
+			}
+		}
+	}
 }
 
 func (p *V2) dispatcher() {
@@ -473,6 +506,12 @@ func (p *V2) addDevice(dev *device.Device) {
 		common.Log.Warnf("Unknown group ID: %v\n", groupID)
 	}
 
+	sub, err := dev.NewSubscription()
+	if err != nil {
+		common.Log.Warnf("Error obtaining subscription from %v\n", dev.ID())
+	}
+	go p.broadcastLimiter(sub.Events())
+
 	vendor, err := dev.GetHardwareVendor()
 	if err != nil {
 		common.Log.Errorf("Error retrieving device hardware vendor: %v\n", err)
@@ -483,7 +522,8 @@ func (p *V2) addDevice(dev *device.Device) {
 		common.Log.Errorf("Error retrieving device hardware product: %v\n", err)
 		return
 	}
-	if vendor == device.VendorLifx {
+	switch vendor {
+	case device.VendorLifx:
 		switch product {
 		case device.ProductLifxOriginal1000, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage, device.ProductLifxColor1000:
 			p.Lock()
@@ -520,7 +560,7 @@ func (p *V2) addDevice(dev *device.Device) {
 				return
 			}
 		}
-	} else {
+	default:
 		common.Log.Debugf("Adding device to client: %v\n", dev.ID())
 		if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
 			common.Log.Errorf("Error adding device to client: %v\n", err)
