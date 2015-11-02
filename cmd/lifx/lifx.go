@@ -1,4 +1,4 @@
-// Command lifx allows basic performing operations on LIFX devices over the LAN
+// Command lifx allows performing basic operations on LIFX devices over the LAN
 package main
 
 import (
