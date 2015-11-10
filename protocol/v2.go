@@ -396,14 +396,14 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 	case device.StateService:
 		dev, err := p.getDevice(pkt.Target)
 		if err != nil {
-			dev, err := device.New(addr, p.socket, p.timeout, p.retryInterval, p.Reliable, pkt)
+			// New device
+			dev, err = device.New(addr, p.socket, p.timeout, p.retryInterval, p.Reliable, pkt)
 			if err != nil {
 				common.Log.Errorf("Failed creating device: %v\n", err)
 				return
 			}
-			p.addDevice(dev)
-			return
 		}
+		p.addDevice(dev)
 		// Perform state discovery on lights
 		if l, ok := dev.(*device.Light); ok {
 			if err := l.Get(); err != nil {
@@ -473,37 +473,29 @@ func (p *V2) addGroup(pkt *packet.Packet) {
 	}
 }
 
-func (p *V2) addDevice(dev *device.Device) {
+func (p *V2) addDevice(dev device.GenericDevice) {
 	common.Log.Debugf("Attempting to add device: %v\n", dev.ID())
-	_, err := p.getDevice(dev.ID())
-	if err == nil {
+	d, err := p.getDevice(dev.ID())
+	known := err == nil
+	if known {
+		dev = d
+	} else {
+		// We don't know this device, add it now and possibly overwrite it later
+		p.Lock()
+		p.devices[dev.ID()] = dev
+		p.Unlock()
+	}
+
+	if _, ok := dev.(*device.Light); !ok {
+		// Determine light or device if we don't have a light
+		dev = p.lightOrDev(dev)
+	}
+
+	p.updateLocationGroup(dev)
+
+	if known {
 		common.Log.Debugf("Device already known: %v\n", dev.ID())
 		return
-	}
-	p.Lock()
-	p.devices[dev.ID()] = dev
-	p.Unlock()
-
-	locationID, err := dev.GetLocation()
-	if err != nil {
-		common.Log.Warnf("Error retrieving device location: %v\n", err)
-	}
-	p.RLock()
-	location, ok := p.locations[locationID]
-	p.RUnlock()
-	if !ok {
-		common.Log.Warnf("Unknown location ID: %v\n", locationID)
-	}
-
-	groupID, err := dev.GetGroup()
-	if err != nil {
-		common.Log.Warnf("Error retrieving device group: %v\n", err)
-	}
-	p.RLock()
-	group, ok := p.groups[groupID]
-	p.RUnlock()
-	if !ok {
-		common.Log.Warnf("Unknown group ID: %v\n", groupID)
 	}
 
 	sub, err := dev.NewSubscription()
@@ -512,16 +504,65 @@ func (p *V2) addDevice(dev *device.Device) {
 	}
 	go p.broadcastLimiter(sub.Events())
 
+	common.Log.Debugf("Adding device to client: %v\n", dev.ID())
+	if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
+		common.Log.Errorf("Error adding device to client: %v\n", err)
+		return
+	}
+	common.Log.Debugf("Added device to client: %v\n", dev.ID())
+}
+
+func (p *V2) updateLocationGroup(dev device.GenericDevice) {
+	locationID, err := dev.GetLocation()
+	if err != nil {
+		common.Log.Warnf("Error retrieving device location: %v\n", err)
+		return
+	}
+	p.RLock()
+	location, ok := p.locations[locationID]
+	p.RUnlock()
+	if !ok {
+		common.Log.Warnf("Unknown location ID: %v\n", locationID)
+		return
+	}
+
+	groupID, err := dev.GetGroup()
+	if err != nil {
+		common.Log.Warnf("Error retrieving device group: %v\n", err)
+		return
+	}
+	p.RLock()
+	group, ok := p.groups[groupID]
+	p.RUnlock()
+	if !ok {
+		common.Log.Warnf("Unknown group ID: %v\n", groupID)
+		return
+	}
+
+	common.Log.Debugf("Adding device to location (%s): %v\n", locationID, dev.ID())
+	if err := location.AddDevice(dev); err != nil {
+		common.Log.Debugf("Error adding device to location: %v\n", err)
+	}
+	common.Log.Debugf("Adding device to group (%s): %v\n", groupID, dev.ID())
+	if err := group.AddDevice(dev); err != nil {
+		common.Log.Debugf("Error adding device to group: %v\n", err)
+	}
+}
+
+// lightOrDev either constructs a device.Light from the passed dev, or returns
+// the dev untouched
+func (p *V2) lightOrDev(dev device.GenericDevice) device.GenericDevice {
 	vendor, err := dev.GetHardwareVendor()
 	if err != nil {
 		common.Log.Errorf("Error retrieving device hardware vendor: %v\n", err)
-		return
+		return dev
 	}
 	product, err := dev.GetHardwareProduct()
 	if err != nil {
 		common.Log.Errorf("Error retrieving device hardware product: %v\n", err)
-		return
+		return dev
 	}
+
 	switch vendor {
 	case device.VendorLifx:
 		switch product {
@@ -529,50 +570,18 @@ func (p *V2) addDevice(dev *device.Device) {
 			p.Lock()
 			// Need to figure if there's a way to do this without being racey on the
 			// lock inside the dev
-			l := &device.Light{Device: *dev}
+			d := dev.(*device.Device)
+			l := &device.Light{Device: *d}
+			common.Log.Debugf("Device is a light: %v\n", l.ID())
+			// Replace the known dev with our constructed light
 			p.devices[l.ID()] = l
 			p.Unlock()
-			common.Log.Debugf("New device is a light: %v\n", l.ID())
-			common.Log.Debugf("Adding device to location (%s): %v\n", locationID, l.ID())
-			if err := location.AddDevice(l); err != nil {
-				common.Log.Warnf("Error adding device to location: %v\n", err)
-			}
-			common.Log.Debugf("Adding device to group (%s): %v\n", groupID, l.ID())
-			if err := group.AddDevice(l); err != nil {
-				common.Log.Warnf("Error adding device to group: %v\n", err)
-			}
 			if err := l.Get(); err != nil {
 				common.Log.Debugf("Failed getting light state: %v\n", err)
 			}
-			common.Log.Debugf("Adding device to client: %v\n", l.ID())
-			if err := p.publish(common.EventNewDevice{Device: l}); err != nil {
-				common.Log.Errorf("Error adding device to client: %v\n", err)
-				return
-			}
-			common.Log.Debugf("Added device to client: %v\n", dev.ID())
-			// Lights get an early return because we've set everything up for
-			// them, other devices are handled generically below
-			return
-		default:
-			common.Log.Debugf("Adding device to client: %v\n", dev.ID())
-			if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
-				common.Log.Errorf("Error adding device to client: %v\n", err)
-				return
-			}
-		}
-	default:
-		common.Log.Debugf("Adding device to client: %v\n", dev.ID())
-		if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
-			common.Log.Errorf("Error adding device to client: %v\n", err)
+			return l
 		}
 	}
-	common.Log.Debugf("Adding device to location (%s): %v\n", locationID, dev.ID())
-	if err := location.AddDevice(dev); err != nil {
-		common.Log.Warnf("Error adding device to location: %v\n", err)
-	}
-	common.Log.Debugf("Adding device to group (%s): %v\n", groupID, dev.ID())
-	if err := group.AddDevice(dev); err != nil {
-		common.Log.Warnf("Error adding device to group: %v\n", err)
-	}
-	common.Log.Debugf("Added device to client: %v\n", dev.ID())
+
+	return dev
 }

@@ -56,21 +56,6 @@ const (
 type responseMap map[uint8]packet.Chan
 type doneMap map[uint8]chan struct{}
 
-type GenericDevice interface {
-	common.Device
-	Handle(*packet.Packet)
-	Close() error
-	Seen() time.Time
-	SetSeen(time.Time)
-	SetStatePower(*packet.Packet) error
-	SetStateLabel(*packet.Packet) error
-	SetStateLocation(*packet.Packet) error
-	SetStateGroup(*packet.Packet) error
-	GetLocation() (string, error)
-	GetGroup() (string, error)
-	ResetLimiter()
-}
-
 type Device struct {
 	id              uint64
 	address         *net.UDPAddr
@@ -366,11 +351,11 @@ func (d *Device) SetPower(state bool) error {
 	return nil
 }
 
-func (d *Device) GetLocation() (ret string, err error) {
-	if d.locationID != ret {
-		return d.locationID, nil
-	}
+func (d *Device) CachedLocation() string {
+	return d.locationID
+}
 
+func (d *Device) GetLocation() (ret string, err error) {
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetLocation)
 	req, err := d.Send(pkt, d.reliable, true)
@@ -392,11 +377,11 @@ func (d *Device) GetLocation() (ret string, err error) {
 	return d.locationID, nil
 }
 
-func (d *Device) GetGroup() (ret string, err error) {
-	if d.groupID != ret {
-		return d.groupID, nil
-	}
+func (d *Device) CachedGroup() string {
+	return d.groupID
+}
 
+func (d *Device) GetGroup() (ret string, err error) {
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetGroup)
 	req, err := d.Send(pkt, d.reliable, true)
