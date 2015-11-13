@@ -303,11 +303,13 @@ func (p *V2) dispatcher() {
 			buf := make([]byte, 1500)
 			n, addr, err := p.socket.ReadFromUDP(buf)
 			if err != nil {
-				common.Log.Fatalf("Failed reading from socket: %v\n", err)
+				common.Log.Errorf("Failed reading from socket: %v\n", err)
+				continue
 			}
 			pkt, err := packet.Decode(buf[:n])
 			if err != nil {
-				common.Log.Fatalf("Failed decoding packet: %v\n", err)
+				common.Log.Errorf("Failed decoding packet: %v\n", err)
+				continue
 			}
 			go p.process(pkt, addr)
 		}
