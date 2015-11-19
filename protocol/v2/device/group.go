@@ -202,19 +202,16 @@ func (g *Group) CachedColor() common.Color {
 	return c
 }
 
-func (g *Group) getColor(cached bool) (common.Color, error) {
-	var (
-		hueSum, satSum, brightSum, kelvSum uint64
-		color                              common.Color
-	)
-
+func (g *Group) getColor(cached bool) (color common.Color, err error) {
 	lights := g.Lights()
 
 	if len(lights) == 0 {
 		return color, nil
 	}
 
-	for _, light := range lights {
+	colors := make([]common.Color, len(lights))
+
+	for i, light := range lights {
 		var (
 			c   common.Color
 			err error
@@ -227,16 +224,10 @@ func (g *Group) getColor(cached bool) (common.Color, error) {
 				return color, err
 			}
 		}
-		hueSum += uint64(c.Hue)
-		satSum += uint64(c.Saturation)
-		brightSum += uint64(c.Brightness)
-		kelvSum += uint64(c.Kelvin)
+		colors[i] = c
 	}
 
-	color.Hue = uint16(hueSum / uint64(len(lights)))
-	color.Saturation = uint16(satSum / uint64(len(lights)))
-	color.Brightness = uint16(brightSum / uint64(len(lights)))
-	color.Kelvin = uint16(kelvSum / uint64(len(lights)))
+	color = common.AverageColor(colors...)
 
 	return color, nil
 }
