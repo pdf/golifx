@@ -37,7 +37,7 @@ type of device you will interact with.
 ```go
 const (
 	// VERSION of this library
-	VERSION = "0.3.5"
+	VERSION = "0.3.6"
 )
 ```
 
@@ -336,6 +336,13 @@ Color is used to represent the color and color temperature of a light. The color
 is represented as a 48-bit HSB (Hue, Saturation, Brightness) value. The color
 temperature is represented in K (Kelvin) and is used to adjust the warmness /
 coolness of a white light, which is most obvious when saturation is close zero.
+
+#### func  AverageColor
+
+```go
+func AverageColor(colors ...Color) (color Color)
+```
+AverageColor returns the average of the provided colors
 
 #### type Device
 
