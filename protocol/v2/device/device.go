@@ -50,6 +50,8 @@ const (
 	ProductLifxColor650            uint32 = 3
 	ProductLifxWhite800LowVoltage  uint32 = 10
 	ProductLifxWhite800HighVoltage uint32 = 11
+	ProductLifxWhite900BR30        uint32 = 18
+	ProductLifxColor1000BR30       uint32 = 20
 	ProductLifxColor1000           uint32 = 22
 )
 
