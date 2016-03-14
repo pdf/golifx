@@ -11,6 +11,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 
 	"github.com/pdf/golifx"
 	"github.com/pdf/golifx/common"
@@ -130,7 +131,7 @@ func generateDocs(c *cobra.Command, args []string) {
 	if path[len(path)-1] != os.PathSeparator {
 		path += string(os.PathSeparator)
 	}
-	cobra.GenMarkdownTree(app, path)
+	doc.GenMarkdownTree(app, path)
 }
 
 func version(c *cobra.Command, args []string) {
