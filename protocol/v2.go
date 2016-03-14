@@ -568,7 +568,7 @@ func (p *V2) lightOrDev(dev device.GenericDevice) device.GenericDevice {
 	switch vendor {
 	case device.VendorLifx:
 		switch product {
-		case device.ProductLifxOriginal1000, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage, device.ProductLifxColor1000:
+		case device.ProductLifxOriginal1000, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage, device.ProductLifxWhite900BR30, device.ProductLifxColor1000BR30, device.ProductLifxColor1000:
 			p.Lock()
 			// Need to figure if there's a way to do this without being racey on the
 			// lock inside the dev
