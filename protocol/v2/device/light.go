@@ -19,7 +19,7 @@ const (
 )
 
 type Light struct {
-	Device
+	*Device
 	color common.Color
 }
 

@@ -165,10 +165,11 @@ func (c *Client) removeDeviceByID(id uint64) error {
 // GetLocations returns a slice of all locations known to the client, or
 // common.ErrNotFound if no locations are currently known.
 func (c *Client) GetLocations() (locations []common.Location, err error) {
+	c.RLock()
 	if len(c.locations) == 0 {
+		c.RUnlock()
 		return locations, common.ErrNotFound
 	}
-	c.RLock()
 	for _, location := range c.locations {
 		locations = append(locations, location)
 	}
@@ -258,10 +259,11 @@ func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
 // GetGroups returns a slice of all groups known to the client, or
 // common.ErrNotFound if no groups are currently known.
 func (c *Client) GetGroups() (groups []common.Group, err error) {
+	c.RLock()
 	if len(c.groups) == 0 {
+		c.RUnlock()
 		return groups, common.ErrNotFound
 	}
-	c.RLock()
 	for _, group := range c.groups {
 		groups = append(groups, group)
 	}
@@ -351,10 +353,11 @@ func (c *Client) GetGroupByLabel(label string) (common.Group, error) {
 // GetDevices returns a slice of all devices known to the client, or
 // common.ErrNotFound if no devices are currently known.
 func (c *Client) GetDevices() (devices []common.Device, err error) {
+	c.RLock()
 	if len(c.devices) == 0 {
+		c.RUnlock()
 		return devices, common.ErrNotFound
 	}
-	c.RLock()
 	for _, device := range c.devices {
 		devices = append(devices, device)
 	}

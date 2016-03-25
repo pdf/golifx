@@ -214,8 +214,10 @@ func (p *Packet) DecodePayload(dest interface{}) error {
 		p.mutex.RUnlock()
 		return common.ErrProtocol
 	}
-	err := binary.Read(bytes.NewBuffer(p.payload), binary.LittleEndian, dest)
 	p.mutex.RUnlock()
+	p.mutex.Lock()
+	err := binary.Read(bytes.NewBuffer(p.payload), binary.LittleEndian, dest)
+	p.mutex.Unlock()
 	return err
 }
 

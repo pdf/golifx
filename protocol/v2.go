@@ -93,17 +93,17 @@ func (p *V2) init() error {
 	if err != nil {
 		return err
 	}
-	p.broadcast = &device.Light{Device: *broadcastDev}
+	p.broadcast = &device.Light{Device: broadcastDev}
 	broadcastSub, err := p.broadcast.NewSubscription()
 	if err != nil {
 		return err
 	}
-	go p.broadcastLimiter(broadcastSub.Events())
 	p.devices = make(map[uint64]device.GenericDevice)
 	p.locations = make(map[string]*device.Location)
 	p.groups = make(map[string]*device.Group)
 	p.subscriptions = make(map[string]*common.Subscription)
 	p.quitChan = make(chan struct{})
+	go p.broadcastLimiter(broadcastSub.Events())
 	go p.dispatcher()
 	p.initialized = true
 
@@ -570,13 +570,13 @@ func (p *V2) lightOrDev(dev device.GenericDevice) device.GenericDevice {
 		switch product {
 		case device.ProductLifxOriginal1000, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage, device.ProductLifxWhite900BR30, device.ProductLifxColor1000BR30, device.ProductLifxColor1000:
 			p.Lock()
-			// Need to figure if there's a way to do this without being racey on the
-			// lock inside the dev
 			d := dev.(*device.Device)
-			l := &device.Light{Device: *d}
+			d.Lock()
+			l := &device.Light{Device: d}
 			common.Log.Debugf("Device is a light: %v\n", l.ID())
 			// Replace the known dev with our constructed light
 			p.devices[l.ID()] = l
+			d.Unlock()
 			p.Unlock()
 			if err := l.Get(); err != nil {
 				common.Log.Debugf("Failed getting light state: %v\n", err)
