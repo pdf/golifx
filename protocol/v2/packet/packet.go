@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/lunixbochs/struc"
 
@@ -261,6 +262,7 @@ func (p *Packet) encode() (length uint16, byteArr []byte, err error) {
 }
 
 func init() {
+	rand.Seed(int64(time.Now().Nanosecond()))
 	ClientID = rand.Uint32()
 }
 
