@@ -5,6 +5,7 @@
 package device
 
 import (
+	"fmt"
 	"math"
 	"net"
 	"sync"
@@ -60,11 +61,13 @@ type responseMap map[uint8]packet.Chan
 type doneMap map[uint8]doneChan
 
 type Device struct {
-	id              uint64
-	address         *net.UDPAddr
-	power           uint16
-	label           string
-	hardwareVersion stateVersion
+	id                    uint64
+	address               *net.UDPAddr
+	power                 uint16
+	label                 string
+	hardwareVersion       stateVersion
+	firmwareVersion       uint32
+	firmwareVersionString string
 
 	locationID string
 	groupID    string
@@ -103,12 +106,22 @@ type statePower struct {
 	Level uint16 `struc:"little"`
 }
 
+type stateHostFirmware struct {
+	Build    uint64 `struc:"little"`
+	Reserved uint64 `struc:"little"`
+	Version  uint32 `struc:"little"`
+}
+
 type payloadPower struct {
 	Level uint16 `struc:"little"`
 }
 
 type payloadLabel struct {
 	Label [32]byte `struc:"little"`
+}
+
+func (f *stateHostFirmware) String() string {
+	return fmt.Sprintf("%d.%d", (f.Version&0xffff0000)>>16, f.Version&0xffff)
 }
 
 func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool) {
@@ -217,6 +230,25 @@ func (d *Device) SetStateGroup(pkt *packet.Packet) error {
 		d.Unlock()
 		// TODO: Work out what to notify on without causing protocol version
 		// dependency
+	}
+
+	return nil
+}
+
+func (d *Device) SetStateHostFirmware(pkt *packet.Packet) error {
+	f := stateHostFirmware{}
+	if err := pkt.DecodePayload(&f); err != nil {
+		return err
+	}
+	common.Log.Debugf("Got firmware version (%v): %+v\n", d.id, f.Version)
+	d.RLock()
+	version := d.firmwareVersion
+	d.RUnlock()
+	if f.Version != version {
+		d.Lock()
+		d.firmwareVersion = f.Version
+		d.firmwareVersionString = f.String()
+		d.Unlock()
 	}
 
 	return nil
@@ -509,6 +541,35 @@ func (d *Device) CachedHardwareProduct() uint32 {
 	product := d.hardwareVersion.Product
 	d.RUnlock()
 	return product
+}
+
+func (d *Device) CachedFirmwareVersion() string {
+	d.RLock()
+	version := d.firmwareVersionString
+	d.RUnlock()
+	return version
+}
+
+func (d *Device) GetFirmwareVersion() (ret string, err error) {
+	pkt := packet.New(d.address, d.requestSocket)
+	pkt.SetType(GetHostFirmware)
+	req, err := d.Send(pkt, d.reliable, true)
+	if err != nil {
+		return ret, err
+	}
+
+	common.Log.Debugf("Waiting for firmware data (%v)\n", d.id)
+	pktResponse := <-req
+	if pktResponse.Error != nil {
+		return ret, err
+	}
+
+	err = d.SetStateHostFirmware(&pktResponse.Result)
+	if err != nil {
+		return ret, err
+	}
+
+	return d.CachedFirmwareVersion(), nil
 }
 
 func (d *Device) Handle(pkt *packet.Packet) {

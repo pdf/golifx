@@ -1,7 +1,5 @@
 package common
 
-import "time"
-
 // Device represents a generic LIFX device
 type Device interface {
 	// Returns the ID for the device
@@ -19,24 +17,12 @@ type Device interface {
 	CachedPower() bool
 	// SetPower sets the power state of the device, true for on, false for off
 	SetPower(state bool) error
+	// GetFirmwareVersion returns the firmware version of the device
+	GetFirmwareVersion() (string, error)
+	// CachedFirmwareVersion returns the last known firmware version of the
+	// device
+	CachedFirmwareVersion() string
 
 	// Device is a SubscriptionTarget
 	SubscriptionTarget
-}
-
-// Light represents a LIFX light device
-type Light interface {
-	// SetColor changes the color of the light, transitioning over the specified
-	// duration
-	SetColor(color Color, duration time.Duration) error
-	// GetColor requests the current color of the light
-	GetColor() (Color, error)
-	// CachedColor returns the last known color of the light
-	CachedColor() Color
-	// SetPowerDuration sets the power of the light, transitioning over the
-	// speficied duration, state is true for on, false for off.
-	SetPowerDuration(state bool, duration time.Duration) error
-
-	// Light is a superset of the Device interface
-	Device
 }
