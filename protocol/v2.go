@@ -141,7 +141,7 @@ func (p *V2) Discover() error {
 		for _, dev := range p.devices {
 			// If the device has not been seen in twice the time since the last
 			// discovery, mark it as extinct
-			if dev.Seen().Before(time.Now().Add(time.Now().Sub(p.lastDiscovery) * -2)) {
+			if dev.Seen().Before(time.Now().Add(time.Since(p.lastDiscovery) * -2)) {
 				extinct = append(extinct, dev)
 			}
 		}
@@ -162,7 +162,7 @@ func (p *V2) Discover() error {
 						common.Log.Warnf("Failed removing extinct device '%d' from location (%v): %v", dev.ID(), locationID, err)
 					}
 					if len(location.Devices()) == 0 {
-						if err := p.publish(common.EventExpiredLocation{Location: location}); err != nil {
+						if err = p.publish(common.EventExpiredLocation{Location: location}); err != nil {
 							common.Log.Warnf("Failed publishing expired event for device '%d'", dev.ID())
 						}
 					}
@@ -179,7 +179,7 @@ func (p *V2) Discover() error {
 						common.Log.Warnf("Failed removing extinct device '%d' from group (%v): %v", dev.ID(), groupID, err)
 					}
 					if len(group.Devices()) == 0 {
-						if err := p.publish(common.EventExpiredGroup{Group: group}); err != nil {
+						if err = p.publish(common.EventExpiredGroup{Group: group}); err != nil {
 							common.Log.Warnf("Failed publishing expired event for group '%v'", groupID)
 						}
 					}
