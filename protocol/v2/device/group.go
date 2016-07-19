@@ -24,6 +24,8 @@ type Group struct {
 	devices       map[uint64]GenericDevice
 	subscriptions map[string]*common.Subscription
 	quitChan      chan struct{}
+	color         common.Color
+	power         bool
 	sync.RWMutex
 }
 
@@ -106,23 +108,11 @@ func (g *Group) addDeviceSubscription(dev GenericDevice) error {
 			case event := <-events:
 				switch event.(type) {
 				case common.EventUpdateColor:
-					color := g.CachedColor()
-					if err != nil {
-						continue
-					}
-					err = g.publish(common.EventUpdateColor{Color: color})
-					if err != nil {
-						continue
-					}
+					// trigger event if necessary
+					_ = g.CachedColor()
 				case common.EventUpdatePower:
-					state := g.CachedPower()
-					if err != nil {
-						continue
-					}
-					err = g.publish(common.EventUpdatePower{Power: state})
-					if err != nil {
-						continue
-					}
+					// trigger event if necessary
+					_ = g.CachedPower()
 				}
 			}
 		}
@@ -161,6 +151,10 @@ func (g *Group) CachedPower() bool {
 
 func (g *Group) getPower(cached bool) (bool, error) {
 	var state uint
+	g.RLock()
+	lastPower := g.power
+	g.RUnlock()
+
 	devices := g.Devices()
 
 	if len(devices) == 0 {
@@ -181,11 +175,19 @@ func (g *Group) getPower(cached bool) (bool, error) {
 			}
 		}
 		if p {
-			state += 1
+			state++
 		}
 	}
 
-	return state > 0, nil
+	g.power = state > 0
+	if lastPower != g.power {
+		err := g.publish(common.EventUpdatePower{Power: g.power})
+		if err != nil {
+			return g.power, err
+		}
+	}
+
+	return g.power, nil
 }
 
 // GetColor returns the average color for lights in the group, or error if any
@@ -203,6 +205,10 @@ func (g *Group) CachedColor() common.Color {
 }
 
 func (g *Group) getColor(cached bool) (color common.Color, err error) {
+	g.RLock()
+	lastColor := g.color
+	g.RUnlock()
+
 	lights := g.Lights()
 
 	if len(lights) == 0 {
@@ -227,9 +233,15 @@ func (g *Group) getColor(cached bool) (color common.Color, err error) {
 		colors[i] = c
 	}
 
-	color = common.AverageColor(colors...)
+	g.color = common.AverageColor(colors...)
+	if lastColor != g.color {
+		err = g.publish(common.EventUpdateColor{Color: g.color})
+		if err != nil {
+			return g.color, err
+		}
+	}
 
-	return color, nil
+	return g.color, nil
 }
 
 func (g *Group) SetColor(color common.Color, duration time.Duration) error {

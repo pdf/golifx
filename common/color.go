@@ -50,3 +50,11 @@ func AverageColor(colors ...Color) (color Color) {
 
 	return color
 }
+
+// ColorEqual tests whether two Colors are equal
+func ColorEqual(a, b Color) bool {
+	return a.Hue == b.Hue &&
+		a.Saturation == b.Saturation &&
+		a.Brightness == b.Brightness &&
+		a.Kelvin == b.Kelvin
+}
