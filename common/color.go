@@ -8,10 +8,10 @@ import "math"
 // warmness / coolness of a white light, which is most obvious when saturation
 // is close zero.
 type Color struct {
-	Hue        uint16 // range 0 to 65535
-	Saturation uint16 // range 0 to 65535
-	Brightness uint16 // range 0 to 65535
-	Kelvin     uint16 // range 2500° (warm) to 9000° (cool)
+	Hue        uint16 `json:"hue"`        // range 0 to 65535
+	Saturation uint16 `json:"saturation"` // range 0 to 65535
+	Brightness uint16 `json:"brightness"` // range 0 to 65535
+	Kelvin     uint16 `json:"kelvin"`     // range 2500° (warm) to 9000° (cool)
 }
 
 // AverageColor returns the average of the provided colors
