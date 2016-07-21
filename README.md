@@ -303,6 +303,13 @@ var (
 )
 ```
 
+#### func  ColorEqual
+
+```go
+func ColorEqual(a, b Color) bool
+```
+ColorEqual tests whether two Colors are equal
+
 #### func  SetLogger
 
 ```go
@@ -325,10 +332,10 @@ Client defines the interface required by protocols
 
 ```go
 type Color struct {
-	Hue        uint16 // range 0 to 65535
-	Saturation uint16 // range 0 to 65535
-	Brightness uint16 // range 0 to 65535
-	Kelvin     uint16 // range 2500° (warm) to 9000° (cool)
+	Hue        uint16 `json:"hue"`        // range 0 to 65535
+	Saturation uint16 `json:"saturation"` // range 0 to 65535
+	Brightness uint16 `json:"brightness"` // range 0 to 65535
+	Kelvin     uint16 `json:"kelvin"`     // range 2500° (warm) to 9000° (cool)
 }
 ```
 
@@ -363,6 +370,11 @@ type Device interface {
 	CachedPower() bool
 	// SetPower sets the power state of the device, true for on, false for off
 	SetPower(state bool) error
+	// GetFirmwareVersion returns the firmware version of the device
+	GetFirmwareVersion() (string, error)
+	// CachedFirmwareVersion returns the last known firmware version of the
+	// device
+	CachedFirmwareVersion() string
 
 	// Device is a SubscriptionTarget
 	SubscriptionTarget
