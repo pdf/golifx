@@ -23,6 +23,7 @@ var (
 
 	flagTimeout  time.Duration
 	flagLogLevel string
+	flagPort     int
 
 	logger = logrus.New()
 	app    = &cobra.Command{
@@ -64,6 +65,7 @@ func init() {
 
 	app.PersistentFlags().DurationVarP(&flagTimeout, `timeout`, `t`, common.DefaultTimeout, `timeout for all operations`)
 	app.PersistentFlags().StringVarP(&flagLogLevel, `log-level`, `L`, `info`, `log level, one of: [debug,info,warn,error]`)
+	app.PersistentFlags().IntVarP(&flagPort, `port`, `p`, 56700, `UDP listen port`)
 
 	app.AddCommand(cmdLight)
 	app.AddCommand(cmdGroup)
@@ -82,7 +84,7 @@ func main() {
 func setupClient(c *cobra.Command, args []string) {
 	var err error
 
-	client, err = golifx.NewClient(&protocol.V2{Reliable: true})
+	client, err = golifx.NewClient(&protocol.V2{Reliable: true, Port: flagPort})
 	if err != nil {
 		logger.WithField(`error`, err).Fatalln(`Failed initializing client`)
 	}
@@ -112,7 +114,13 @@ func generateBashComp(c *cobra.Command, args []string) {
 			`error`:    err,
 		}).Fatalln(`Could not open file`)
 	}
-	app.GenBashCompletion(buf)
+	err = app.GenBashCompletion(buf)
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			`filename`: args[0],
+			`error`:    err,
+		}).Fatalln(`Could not generate completion`)
+	}
 	if _, err := buf.WriteTo(f); err != nil {
 		logger.WithField(`error`, err).Fatalln(`Failed writing to file`)
 	}
@@ -131,7 +139,12 @@ func generateDocs(c *cobra.Command, args []string) {
 	if path[len(path)-1] != os.PathSeparator {
 		path += string(os.PathSeparator)
 	}
-	doc.GenMarkdownTree(app, path)
+	if err := doc.GenMarkdownTree(app, path); err != nil {
+		logger.WithFields(logrus.Fields{
+			`filename`: args[0],
+			`error`:    err,
+		}).Fatalln(`Could no generate markdown`)
+	}
 }
 
 func version(c *cobra.Command, args []string) {

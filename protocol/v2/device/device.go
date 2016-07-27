@@ -148,11 +148,7 @@ func (d *Device) Discover() error {
 	pkt := packet.New(d.address, d.requestSocket)
 	pkt.SetType(GetService)
 	_, err := d.Send(pkt, false, false)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // NewSubscription returns a new *common.Subscription for receiving events from
@@ -309,17 +305,13 @@ func (d *Device) SetLabel(label string) error {
 	d.Lock()
 	d.label = label
 	d.Unlock()
-	if err := d.publish(common.EventUpdateLabel{Label: label}); err != nil {
-		return err
-	}
-	return nil
+	return d.publish(common.EventUpdateLabel{Label: label})
 }
 
 func (d *Device) CachedLabel() string {
 	d.RLock()
-	label := d.label
-	d.RUnlock()
-	return label
+	defer d.RUnlock()
+	return d.label
 }
 
 func (d *Device) SetStatePower(pkt *packet.Packet) error {
@@ -366,9 +358,8 @@ func (d *Device) GetPower() (bool, error) {
 
 func (d *Device) CachedPower() bool {
 	d.RLock()
-	state := d.power != 0
-	d.RUnlock()
-	return state
+	defer d.RUnlock()
+	return d.power > 0
 }
 
 func (d *Device) SetPower(state bool) error {
@@ -401,17 +392,13 @@ func (d *Device) SetPower(state bool) error {
 	d.Lock()
 	d.power = p.Level
 	d.Unlock()
-	if err := d.publish(common.EventUpdatePower{Power: p.Level > 0}); err != nil {
-		return err
-	}
-	return nil
+	return d.publish(common.EventUpdatePower{Power: p.Level > 0})
 }
 
 func (d *Device) CachedLocation() string {
 	d.RLock()
-	location := d.locationID
-	d.RUnlock()
-	return location
+	defer d.RUnlock()
+	return d.locationID
 }
 
 func (d *Device) GetLocation() (ret string, err error) {
@@ -438,9 +425,8 @@ func (d *Device) GetLocation() (ret string, err error) {
 
 func (d *Device) CachedGroup() string {
 	d.RLock()
-	group := d.groupID
-	d.RUnlock()
-	return group
+	defer d.RUnlock()
+	return d.groupID
 }
 
 func (d *Device) GetGroup() (ret string, err error) {
@@ -524,30 +510,26 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 
 func (d *Device) CachedHardwareVersion() uint32 {
 	d.RLock()
-	version := d.hardwareVersion.Version
-	d.RUnlock()
-	return version
+	defer d.RUnlock()
+	return d.hardwareVersion.Version
 }
 
 func (d *Device) CachedHardwareVendor() uint32 {
 	d.RLock()
-	vendor := d.hardwareVersion.Vendor
-	d.RUnlock()
-	return vendor
+	defer d.RUnlock()
+	return d.hardwareVersion.Vendor
 }
 
 func (d *Device) CachedHardwareProduct() uint32 {
 	d.RLock()
-	product := d.hardwareVersion.Product
-	d.RUnlock()
-	return product
+	defer d.RUnlock()
+	return d.hardwareVersion.Product
 }
 
 func (d *Device) CachedFirmwareVersion() string {
 	d.RLock()
-	version := d.firmwareVersionString
-	d.RUnlock()
-	return version
+	defer d.RUnlock()
+	return d.firmwareVersionString
 }
 
 func (d *Device) GetFirmwareVersion() (ret string, err error) {
@@ -656,7 +638,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						proxyChan <- pktResponse
 						return
 					case <-ticker.C:
-						common.Log.Debugf("Retrying send after %d milliseconds: %+v\n", *d.retryInterval/time.Millisecond, *pkt)
+						common.Log.Debugf("Retrying send for seq %d on device %d after %d milliseconds\n", seq, d.ID(), *d.retryInterval/time.Millisecond)
 						pktResponse := packet.Response{}
 						if err := pkt.Write(); err != nil {
 							pktResponse.Error = err
@@ -682,9 +664,8 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 func (d *Device) Seen() time.Time {
 	d.RLock()
-	seen := d.seen
-	d.RUnlock()
-	return seen
+	defer d.RUnlock()
+	return d.seen
 }
 
 func (d *Device) SetSeen(seen time.Time) {

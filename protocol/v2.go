@@ -25,6 +25,7 @@ type V2 struct {
 	retryInterval *time.Duration
 	broadcast     *device.Light
 	lastDiscovery time.Time
+	deviceQueue   chan device.GenericDevice
 	devices       map[uint64]device.GenericDevice
 	subscriptions map[string]*common.Subscription
 	locations     map[string]*device.Location
@@ -87,7 +88,7 @@ func (p *V2) init() error {
 	p.socket = socket
 	addr := net.UDPAddr{
 		IP:   net.IPv4(255, 255, 255, 255),
-		Port: p.Port,
+		Port: shared.DefaultPort,
 	}
 	broadcastDev, err := device.New(&addr, p.socket, p.timeout, p.retryInterval, false, nil)
 	if err != nil {
@@ -98,6 +99,7 @@ func (p *V2) init() error {
 	if err != nil {
 		return err
 	}
+	p.deviceQueue = make(chan device.GenericDevice, 16)
 	p.devices = make(map[uint64]device.GenericDevice)
 	p.locations = make(map[string]*device.Location)
 	p.groups = make(map[string]*device.Group)
@@ -105,6 +107,7 @@ func (p *V2) init() error {
 	p.quitChan = make(chan struct{})
 	go p.broadcastLimiter(broadcastSub.Events())
 	go p.dispatcher()
+	go p.addDevices()
 	p.initialized = true
 
 	return nil
@@ -401,13 +404,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 				return
 			}
 		}
-		p.addDevice(dev)
-		// Perform state discovery on lights
-		if l, ok := dev.(*device.Light); ok {
-			if err := l.Get(); err != nil {
-				common.Log.Debugf("Failed getting light state: %v\n", err)
-			}
-		}
+		p.deviceQueue <- dev
 	default:
 		if pkt.GetTarget() == 0 {
 			common.Log.Debugf("Skipping packet without target: %+v\n", *pkt)
@@ -471,6 +468,18 @@ func (p *V2) addGroup(pkt *packet.Packet) {
 	}
 }
 
+func (p *V2) addDevices() {
+	for dev := range p.deviceQueue {
+		p.addDevice(dev)
+		// Perform state discovery on lights
+		if l, ok := dev.(*device.Light); ok {
+			if err := l.Get(); err != nil {
+				common.Log.Debugf("Failed getting light state: %v\n", err)
+			}
+		}
+	}
+}
+
 func (p *V2) addDevice(dev device.GenericDevice) {
 	common.Log.Debugf("Attempting to add device: %v\n", dev.ID())
 	d, err := p.getDevice(dev.ID())
@@ -499,8 +508,9 @@ func (p *V2) addDevice(dev device.GenericDevice) {
 	sub, err := dev.NewSubscription()
 	if err != nil {
 		common.Log.Warnf("Error obtaining subscription from %v\n", dev.ID())
+	} else {
+		go p.broadcastLimiter(sub.Events())
 	}
-	go p.broadcastLimiter(sub.Events())
 
 	common.Log.Debugf("Adding device to client: %v\n", dev.ID())
 	if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {

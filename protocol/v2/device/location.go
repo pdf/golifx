@@ -10,9 +10,6 @@ type Location struct {
 func NewLocation(pkt *packet.Packet) (*Location, error) {
 	l := new(Location)
 	l.init()
-	if err := l.Parse(pkt); err != nil {
-		return l, err
-	}
-
-	return l, nil
+	err := l.Parse(pkt)
+	return l, err
 }

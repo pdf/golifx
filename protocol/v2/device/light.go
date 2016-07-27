@@ -50,7 +50,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 	}
 	common.Log.Debugf("Got light state (%v): %+v\n", l.id, s)
 
-	if l.color != s.Color {
+	if s.Color != l.CachedColor() {
 		l.Lock()
 		l.color = s.Color
 		l.Unlock()
@@ -58,7 +58,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 			return err
 		}
 	}
-	if l.power != s.Power {
+	if s.Power > 0 != l.CachedPower() {
 		l.Lock()
 		l.power = s.Power
 		l.Unlock()
@@ -67,7 +67,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 		}
 	}
 	newLabel := stripNull(string(s.Label[:]))
-	if newLabel != l.label {
+	if newLabel != l.CachedLabel() {
 		l.Lock()
 		l.label = newLabel
 		l.Unlock()
@@ -93,16 +93,11 @@ func (l *Light) Get() error {
 		return pktResponse.Error
 	}
 
-	err = l.SetState(&pktResponse.Result)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return l.SetState(&pktResponse.Result)
 }
 
 func (l *Light) SetColor(color common.Color, duration time.Duration) error {
-	if l.color == color {
+	if color != l.CachedColor() {
 		return nil
 	}
 
@@ -129,12 +124,10 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 		common.Log.Debugf("Setting color on %v acknowledged\n", l.id)
 	}
 
+	l.Lock()
 	l.color = color
-	if err := l.publish(common.EventUpdateColor{Color: l.color}); err != nil {
-		return err
-	}
-
-	return nil
+	l.Unlock()
+	return l.publish(common.EventUpdateColor{Color: l.color})
 }
 
 func (l *Light) GetColor() (common.Color, error) {
@@ -146,13 +139,12 @@ func (l *Light) GetColor() (common.Color, error) {
 
 func (l *Light) CachedColor() common.Color {
 	l.RLock()
-	color := l.color
-	l.RUnlock()
-	return color
+	defer l.RUnlock()
+	return l.color
 }
 
 func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
-	if state && l.power > 0 {
+	if state != l.CachedPower() {
 		return nil
 	}
 
@@ -182,9 +174,5 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	l.Lock()
 	l.power = p.Level
 	l.Unlock()
-	if err := l.publish(common.EventUpdatePower{Power: l.power > 0}); err != nil {
-		return err
-	}
-
-	return nil
+	return l.publish(common.EventUpdatePower{Power: l.power > 0})
 }

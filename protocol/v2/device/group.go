@@ -30,31 +30,34 @@ type Group struct {
 }
 
 func (g *Group) init() {
+	g.Lock()
 	g.devices = make(map[uint64]GenericDevice)
 	g.subscriptions = make(map[string]*common.Subscription)
 	g.quitChan = make(chan struct{})
+	g.Unlock()
 }
 
 func (g *Group) ID() string {
 	g.RLock()
-	id := g.idEncoded
-	g.RUnlock()
-	return id
+	defer g.RUnlock()
+	return g.idEncoded
 }
 
 func (g *Group) GetLabel() string {
+	g.RLock()
+	defer g.RUnlock()
 	return stripNull(string(g.label[:]))
 }
 
 func (g *Group) Devices() (devices []common.Device) {
+	g.RLock()
+	defer g.RUnlock()
 	if len(g.devices) == 0 {
 		return devices
 	}
-	g.RLock()
 	for _, dev := range g.devices {
 		devices = append(devices, dev.(common.Device))
 	}
-	g.RUnlock()
 
 	return devices
 }
@@ -73,10 +76,14 @@ func (g *Group) Lights() []common.Light {
 
 func (g *Group) AddDevice(dev GenericDevice) error {
 	g.RLock()
-	_, ok := g.devices[dev.ID()]
+	d, ok := g.devices[dev.ID()]
 	g.RUnlock()
 	if ok {
-		return common.ErrDuplicate
+		// If the old device is of a more specific type than *Device, we don't
+		// need to update it
+		if _, oldIsDev := d.(*Device); !oldIsDev {
+			return common.ErrDuplicate
+		}
 	}
 
 	g.Lock()
@@ -133,11 +140,7 @@ func (g *Group) RemoveDevice(dev GenericDevice) error {
 	delete(g.devices, dev.ID())
 	g.Unlock()
 
-	if err := g.publish(common.EventExpiredDevice{Device: dev}); err != nil {
-		return err
-	}
-
-	return nil
+	return g.publish(common.EventExpiredDevice{Device: dev})
 }
 
 func (g *Group) GetPower() (bool, error) {
@@ -179,7 +182,11 @@ func (g *Group) getPower(cached bool) (bool, error) {
 		}
 	}
 
+	g.Lock()
 	g.power = state > 0
+	g.Unlock()
+	g.RLock()
+	defer g.RUnlock()
 	if lastPower != g.power {
 		err := g.publish(common.EventUpdatePower{Power: g.power})
 		if err != nil {
@@ -190,11 +197,6 @@ func (g *Group) getPower(cached bool) (bool, error) {
 	return g.power, nil
 }
 
-// GetColor returns the average color for lights in the group, or error if any
-// light returns an error.
-//
-// I doubt this is accurate as color theory, but it's good enough for this
-// use-case.
 func (g *Group) GetColor() (common.Color, error) {
 	return g.getColor(false)
 }
@@ -204,7 +206,11 @@ func (g *Group) CachedColor() common.Color {
 	return c
 }
 
-func (g *Group) getColor(cached bool) (color common.Color, err error) {
+// getColor returns the average color for lights in the group, or error if any
+// light returns an error.
+func (g *Group) getColor(cached bool) (common.Color, error) {
+	var err error
+
 	g.RLock()
 	lastColor := g.color
 	g.RUnlock()
@@ -212,28 +218,29 @@ func (g *Group) getColor(cached bool) (color common.Color, err error) {
 	lights := g.Lights()
 
 	if len(lights) == 0 {
-		return color, nil
+		return lastColor, nil
 	}
 
 	colors := make([]common.Color, len(lights))
 
 	for i, light := range lights {
-		var (
-			c   common.Color
-			err error
-		)
+		var c common.Color
 		if cached {
 			c = light.CachedColor()
 		} else {
 			c, err = light.GetColor()
 			if err != nil {
-				return color, err
+				return lastColor, err
 			}
 		}
 		colors[i] = c
 	}
 
+	g.Lock()
 	g.color = common.AverageColor(colors...)
+	g.Unlock()
+	g.RLock()
+	defer g.RUnlock()
 	if lastColor != g.color {
 		err = g.publish(common.EventUpdateColor{Color: g.color})
 		if err != nil {
@@ -440,9 +447,7 @@ func (g *Group) publish(event interface{}) error {
 func NewGroup(pkt *packet.Packet) (*Group, error) {
 	g := new(Group)
 	g.init()
-	if err := g.Parse(pkt); err != nil {
-		return g, err
-	}
+	err := g.Parse(pkt)
 
-	return g, nil
+	return g, err
 }
