@@ -18,7 +18,9 @@ type GenericDevice interface {
 	SetStateLocation(*packet.Packet) error
 	SetStateGroup(*packet.Packet) error
 	GetLocation() (string, error)
+	CachedLocation() string
 	GetGroup() (string, error)
+	CachedGroup() string
 	GetHardwareVendor() (uint32, error)
 	GetHardwareProduct() (uint32, error)
 	ResetLimiter()

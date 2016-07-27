@@ -152,41 +152,37 @@ func (p *V2) Discover() error {
 			delete(p.devices, dev.ID())
 			p.Unlock()
 
-			locationID, err := dev.GetLocation()
-			if err == nil {
-				p.RLock()
-				location, ok := p.locations[locationID]
-				p.RUnlock()
-				if ok {
-					if err = location.RemoveDevice(dev); err != nil {
-						common.Log.Warnf("Failed removing extinct device '%d' from location (%v): %v", dev.ID(), locationID, err)
-					}
-					if len(location.Devices()) == 0 {
-						if err = p.publish(common.EventExpiredLocation{Location: location}); err != nil {
-							common.Log.Warnf("Failed publishing expired event for device '%d'", dev.ID())
-						}
+			locationID := dev.CachedLocation()
+			p.RLock()
+			location, ok := p.locations[locationID]
+			p.RUnlock()
+			if ok {
+				if err := location.RemoveDevice(dev); err != nil {
+					common.Log.Warnf("Failed removing extinct device '%d' from location (%v): %v", dev.ID(), locationID, err)
+				}
+				if len(location.Devices()) == 0 {
+					if err := p.publish(common.EventExpiredLocation{Location: location}); err != nil {
+						common.Log.Warnf("Failed publishing expired event for device '%d'", dev.ID())
 					}
 				}
 			}
 
-			groupID, err := dev.GetGroup()
-			if err == nil {
-				p.RLock()
-				group, ok := p.groups[groupID]
-				p.RUnlock()
-				if ok {
-					if err = group.RemoveDevice(dev); err != nil {
-						common.Log.Warnf("Failed removing extinct device '%d' from group (%v): %v", dev.ID(), groupID, err)
-					}
-					if len(group.Devices()) == 0 {
-						if err = p.publish(common.EventExpiredGroup{Group: group}); err != nil {
-							common.Log.Warnf("Failed publishing expired event for group '%v'", groupID)
-						}
+			groupID := dev.CachedGroup()
+			p.RLock()
+			group, ok := p.groups[groupID]
+			p.RUnlock()
+			if ok {
+				if err := group.RemoveDevice(dev); err != nil {
+					common.Log.Warnf("Failed removing extinct device '%d' from group (%v): %v", dev.ID(), groupID, err)
+				}
+				if len(group.Devices()) == 0 {
+					if err := p.publish(common.EventExpiredGroup{Group: group}); err != nil {
+						common.Log.Warnf("Failed publishing expired event for group '%v'", groupID)
 					}
 				}
 			}
 
-			err = p.publish(common.EventExpiredDevice{Device: dev})
+			err := p.publish(common.EventExpiredDevice{Device: dev})
 			if err != nil {
 				common.Log.Warnf("Failed removing extinct device '%d' from client: %v", dev.ID(), err)
 			}
