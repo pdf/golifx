@@ -10,6 +10,7 @@ type Group struct {
 	mock.Mock
 }
 
+// ID provides a mock function with given fields:
 func (_m *Group) ID() string {
 	ret := _m.Called()
 
@@ -22,6 +23,8 @@ func (_m *Group) ID() string {
 
 	return r0
 }
+
+// GetLabel provides a mock function with given fields:
 func (_m *Group) GetLabel() string {
 	ret := _m.Called()
 
@@ -34,6 +37,8 @@ func (_m *Group) GetLabel() string {
 
 	return r0
 }
+
+// Devices provides a mock function with given fields:
 func (_m *Group) Devices() []common.Device {
 	ret := _m.Called()
 
@@ -48,6 +53,8 @@ func (_m *Group) Devices() []common.Device {
 
 	return r0
 }
+
+// Lights provides a mock function with given fields:
 func (_m *Group) Lights() []common.Light {
 	ret := _m.Called()
 
@@ -62,6 +69,8 @@ func (_m *Group) Lights() []common.Light {
 
 	return r0
 }
+
+// GetPower provides a mock function with given fields:
 func (_m *Group) GetPower() (bool, error) {
 	ret := _m.Called()
 
@@ -81,6 +90,8 @@ func (_m *Group) GetPower() (bool, error) {
 
 	return r0, r1
 }
+
+// GetColor provides a mock function with given fields:
 func (_m *Group) GetColor() (common.Color, error) {
 	ret := _m.Called()
 
@@ -100,6 +111,8 @@ func (_m *Group) GetColor() (common.Color, error) {
 
 	return r0, r1
 }
+
+// SetColor provides a mock function with given fields: color, duration
 func (_m *Group) SetColor(color common.Color, duration time.Duration) error {
 	ret := _m.Called(color, duration)
 
@@ -112,6 +125,8 @@ func (_m *Group) SetColor(color common.Color, duration time.Duration) error {
 
 	return r0
 }
+
+// SetPower provides a mock function with given fields: state
 func (_m *Group) SetPower(state bool) error {
 	ret := _m.Called(state)
 
@@ -124,6 +139,8 @@ func (_m *Group) SetPower(state bool) error {
 
 	return r0
 }
+
+// SetPowerDuration provides a mock function with given fields: state, duration
 func (_m *Group) SetPowerDuration(state bool, duration time.Duration) error {
 	ret := _m.Called(state, duration)
 

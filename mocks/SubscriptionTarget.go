@@ -7,6 +7,7 @@ type SubscriptionTarget struct {
 	mock.Mock
 }
 
+// NewSubscription provides a mock function with given fields:
 func (_m *SubscriptionTarget) NewSubscription() (*common.Subscription, error) {
 	ret := _m.Called()
 
@@ -28,6 +29,8 @@ func (_m *SubscriptionTarget) NewSubscription() (*common.Subscription, error) {
 
 	return r0, r1
 }
+
+// CloseSubscription provides a mock function with given fields: _a0
 func (_m *SubscriptionTarget) CloseSubscription(_a0 *common.Subscription) error {
 	ret := _m.Called(_a0)
 

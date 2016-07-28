@@ -10,6 +10,7 @@ type Light struct {
 	mock.Mock
 }
 
+// SetColor provides a mock function with given fields: color, duration
 func (_m *Light) SetColor(color common.Color, duration time.Duration) error {
 	ret := _m.Called(color, duration)
 
@@ -22,6 +23,8 @@ func (_m *Light) SetColor(color common.Color, duration time.Duration) error {
 
 	return r0
 }
+
+// GetColor provides a mock function with given fields:
 func (_m *Light) GetColor() (common.Color, error) {
 	ret := _m.Called()
 
@@ -41,6 +44,8 @@ func (_m *Light) GetColor() (common.Color, error) {
 
 	return r0, r1
 }
+
+// CachedColor provides a mock function with given fields:
 func (_m *Light) CachedColor() common.Color {
 	ret := _m.Called()
 
@@ -53,6 +58,8 @@ func (_m *Light) CachedColor() common.Color {
 
 	return r0
 }
+
+// SetPowerDuration provides a mock function with given fields: state, duration
 func (_m *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	ret := _m.Called(state, duration)
 

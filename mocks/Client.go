@@ -8,6 +8,7 @@ type Client struct {
 	mock.Mock
 }
 
+// GetTimeout provides a mock function with given fields:
 func (_m *Client) GetTimeout() *time.Duration {
 	ret := _m.Called()
 
@@ -22,6 +23,8 @@ func (_m *Client) GetTimeout() *time.Duration {
 
 	return r0
 }
+
+// GetRetryInterval provides a mock function with given fields:
 func (_m *Client) GetRetryInterval() *time.Duration {
 	ret := _m.Called()
 

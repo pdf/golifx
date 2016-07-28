@@ -10,9 +10,12 @@ type Protocol struct {
 	mock.Mock
 }
 
+// SetClient provides a mock function with given fields: client
 func (_m *Protocol) SetClient(client common.Client) {
 	_m.Called(client)
 }
+
+// Discover provides a mock function with given fields:
 func (_m *Protocol) Discover() error {
 	ret := _m.Called()
 
@@ -25,6 +28,8 @@ func (_m *Protocol) Discover() error {
 
 	return r0
 }
+
+// Close provides a mock function with given fields:
 func (_m *Protocol) Close() error {
 	ret := _m.Called()
 
@@ -37,6 +42,8 @@ func (_m *Protocol) Close() error {
 
 	return r0
 }
+
+// SetPower provides a mock function with given fields: state
 func (_m *Protocol) SetPower(state bool) error {
 	ret := _m.Called(state)
 
@@ -49,6 +56,8 @@ func (_m *Protocol) SetPower(state bool) error {
 
 	return r0
 }
+
+// SetPowerDuration provides a mock function with given fields: state, duration
 func (_m *Protocol) SetPowerDuration(state bool, duration time.Duration) error {
 	ret := _m.Called(state, duration)
 
@@ -61,6 +70,8 @@ func (_m *Protocol) SetPowerDuration(state bool, duration time.Duration) error {
 
 	return r0
 }
+
+// SetColor provides a mock function with given fields: color, duration
 func (_m *Protocol) SetColor(color common.Color, duration time.Duration) error {
 	ret := _m.Called(color, duration)
 
