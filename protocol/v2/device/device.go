@@ -181,7 +181,7 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&l); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got label (%v): %+v\n", d.id, l.Label)
+	common.Log.Debugf("Got label (%v): %+v", d.id, l.Label)
 	newLabel := stripNull(string(l.Label[:]))
 	if newLabel != d.CachedLabel() {
 		d.Lock()
@@ -200,7 +200,7 @@ func (d *Device) SetStateLocation(pkt *packet.Packet) error {
 	if err := l.Parse(pkt); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got location (%v): %+v (%+v)\n", d.id, l.ID(), l.GetLabel())
+	common.Log.Debugf("Got location (%v): %+v (%+v)", d.id, l.ID(), l.GetLabel())
 	newLocation := l.ID()
 	if newLocation != d.CachedLocation() {
 		d.Lock()
@@ -218,7 +218,7 @@ func (d *Device) SetStateGroup(pkt *packet.Packet) error {
 	if err := l.Parse(pkt); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got group (%v): %+v (%+v)\n", d.id, l.ID(), l.GetLabel())
+	common.Log.Debugf("Got group (%v): %+v (%+v)", d.id, l.ID(), l.GetLabel())
 	newGroup := l.ID()
 	if newGroup != d.CachedGroup() {
 		d.Lock()
@@ -236,7 +236,7 @@ func (d *Device) SetStateHostFirmware(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&f); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got firmware version (%v): %+v\n", d.id, f.Version)
+	common.Log.Debugf("Got firmware version (%v): %+v", d.id, f.Version)
 	d.RLock()
 	version := d.firmwareVersion
 	d.RUnlock()
@@ -263,7 +263,7 @@ func (d *Device) GetLabel() (string, error) {
 		return ``, err
 	}
 
-	common.Log.Debugf("Waiting for label (%v)\n", d.id)
+	common.Log.Debugf("Waiting for label (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ``, err
@@ -291,7 +291,7 @@ func (d *Device) SetLabel(label string) error {
 		return err
 	}
 
-	common.Log.Debugf("Setting label on %v: %v\n", d.id, label)
+	common.Log.Debugf("Setting label on %v: %v", d.id, label)
 	req, err := d.Send(pkt, d.reliable, false)
 	if err != nil {
 		return err
@@ -299,7 +299,7 @@ func (d *Device) SetLabel(label string) error {
 	if d.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting label on %v acknowledged\n", d.id)
+		common.Log.Debugf("Setting label on %v acknowledged", d.id)
 	}
 
 	d.Lock()
@@ -319,7 +319,7 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&p); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got power (%v): %+v\n", d.id, d.power)
+	common.Log.Debugf("Got power (%v): %+v", d.id, d.power)
 
 	state := p.Level > 0
 	if d.CachedPower() != state {
@@ -342,7 +342,7 @@ func (d *Device) GetPower() (bool, error) {
 		return false, err
 	}
 
-	common.Log.Debugf("Waiting for power (%v)\n", d.id)
+	common.Log.Debugf("Waiting for power (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return false, err
@@ -378,7 +378,7 @@ func (d *Device) SetPower(state bool) error {
 		return err
 	}
 
-	common.Log.Debugf("Setting power state on %v: %v\n", d.id, state)
+	common.Log.Debugf("Setting power state on %v: %v", d.id, state)
 	req, err := d.Send(pkt, d.reliable, false)
 	if err != nil {
 		return err
@@ -386,7 +386,7 @@ func (d *Device) SetPower(state bool) error {
 	if d.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting power state on %v acknowledged\n", d.id)
+		common.Log.Debugf("Setting power state on %v acknowledged", d.id)
 	}
 
 	d.Lock()
@@ -409,7 +409,7 @@ func (d *Device) GetLocation() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for location (%v)\n", d.id)
+	common.Log.Debugf("Waiting for location (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -437,7 +437,7 @@ func (d *Device) GetGroup() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for group (%v)\n", d.id)
+	common.Log.Debugf("Waiting for group (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -489,7 +489,7 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 		return 0, err
 	}
 
-	common.Log.Debugf("Waiting for hardware version (%v)\n", d.id)
+	common.Log.Debugf("Waiting for hardware version (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return 0, err
@@ -499,7 +499,7 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 	if err = pktResponse.Result.DecodePayload(&v); err != nil {
 		return 0, err
 	}
-	common.Log.Debugf("Got hardware version (%v): %+v\n", d.id, v)
+	common.Log.Debugf("Got hardware version (%v): %+v", d.id, v)
 
 	d.Lock()
 	d.hardwareVersion = v
@@ -540,7 +540,7 @@ func (d *Device) GetFirmwareVersion() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for firmware data (%v)\n", d.id)
+	common.Log.Debugf("Waiting for firmware data (%v)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -571,11 +571,11 @@ func (d *Device) ResetLimiter() {
 func (d *Device) resetLimiter(broadcast bool) {
 	if broadcast {
 		if err := d.publish(shared.EventRequestSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventRequestSent on dev %+v: %+v\n", d.id, err)
+			common.Log.Warnf("Failed publishing EventRequestSent on dev %+v: %+v", d.id, err)
 		}
 	} else {
 		if err := d.publish(shared.EventBroadcastSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %+v: %+v\n", d.id, err)
+			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %+v: %+v", d.id, err)
 		}
 	}
 	d.ResetLimiter()
@@ -629,7 +629,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 							return
 						}
 						if pktResponse.Result.GetType() == Acknowledgement {
-							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries\n", seq, d.ID())
+							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries", seq, d.ID())
 							ticker.Stop()
 							if responseRequired {
 								continue
@@ -638,7 +638,7 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						proxyChan <- pktResponse
 						return
 					case <-ticker.C:
-						common.Log.Debugf("Retrying send for seq %d on device %d after %d milliseconds\n", seq, d.ID(), *d.retryInterval/time.Millisecond)
+						common.Log.Debugf("Retrying send for seq %d on device %d after %d milliseconds", seq, d.ID(), *d.retryInterval/time.Millisecond)
 						pktResponse := packet.Response{}
 						if err := pkt.Write(); err != nil {
 							pktResponse.Error = err
@@ -716,14 +716,14 @@ func (d *Device) handler() {
 			d.Unlock()
 			return
 		case pktResponse := <-d.responseInput:
-			common.Log.Debugf("Handling packet on device %v: %+v\n", d.id, pktResponse)
+			common.Log.Debugf("Handling packet on device %v: %+v", d.id, pktResponse)
 			seq := pktResponse.Result.GetSequence()
 			ch, done, ok = d.getSeq(seq)
 			if !ok {
-				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v\n", seq, d.id, pktResponse)
+				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v", seq, d.id, pktResponse)
 				continue
 			}
-			common.Log.Debugf("Returning packet to caller on device %v: %+v\n", d.id, pktResponse)
+			common.Log.Debugf("Returning packet to caller on device %v: %+v", d.id, pktResponse)
 			select {
 			case ch <- pktResponse:
 			case <-done:

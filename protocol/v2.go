@@ -290,11 +290,11 @@ func (p *V2) dispatcher() {
 			p.Lock()
 			for _, dev := range p.devices {
 				if err := dev.Close(); err != nil {
-					common.Log.Errorf("Failed closing device '%v': %v\n", dev.ID(), err)
+					common.Log.Errorf("Failed closing device '%v': %v", dev.ID(), err)
 				}
 			}
 			if err := p.socket.Close(); err != nil {
-				common.Log.Errorf("Failed closing socket: %v\n", err)
+				common.Log.Errorf("Failed closing socket: %v", err)
 			}
 			p.Unlock()
 			return
@@ -302,12 +302,12 @@ func (p *V2) dispatcher() {
 			buf := make([]byte, 1500)
 			n, addr, err := p.socket.ReadFromUDP(buf)
 			if err != nil {
-				common.Log.Errorf("Failed reading from socket: %v\n", err)
+				common.Log.Errorf("Failed reading from socket: %v", err)
 				continue
 			}
 			pkt, err := packet.Decode(buf[:n])
 			if err != nil {
-				common.Log.Errorf("Failed decoding packet: %v\n", err)
+				common.Log.Errorf("Failed decoding packet: %v", err)
 				continue
 			}
 			go p.process(pkt, addr)
@@ -327,7 +327,7 @@ func (p *V2) getDevice(id uint64) (device.GenericDevice, error) {
 }
 
 func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
-	common.Log.Debugf("Processing packet from %v: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", addr.IP, pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+	common.Log.Debugf("Processing packet from %v: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", addr.IP, pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 
 	// Update device seen time for any targeted packets
 	if pkt.Target != 0 {
@@ -343,43 +343,43 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 		case device.StatePower:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping StatePower packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping StatePower packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 			err = dev.SetStatePower(pkt)
 			if err != nil {
-				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 		case device.StateLabel:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping StateLabel packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping StateLabel packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 			err = dev.SetStateLabel(pkt)
 			if err != nil {
-				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 		case device.State:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping State packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping State packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 			light, ok := dev.(*device.Light)
 			if !ok {
-				common.Log.Debugf("Skipping State packet for non-light device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping State packet for non-light device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 			err = light.SetState(pkt)
 			if err != nil {
-				common.Log.Debugf("Error setting State on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Error setting State on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 				return
 			}
 		default:
-			common.Log.Debugf("Skipping packet with non-local source: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v\n", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+			common.Log.Debugf("Skipping packet with non-local source: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
 		}
 		return
 	}
@@ -400,22 +400,22 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 			// New device
 			dev, err = device.New(addr, p.socket, p.timeout, p.retryInterval, p.Reliable, pkt)
 			if err != nil {
-				common.Log.Errorf("Failed creating device: %v\n", err)
+				common.Log.Errorf("Failed creating device: %v", err)
 				return
 			}
 		}
 		p.deviceQueue <- dev
 	default:
 		if pkt.GetTarget() == 0 {
-			common.Log.Debugf("Skipping packet without target: %+v\n", *pkt)
+			common.Log.Debugf("Skipping packet without target: %+v", *pkt)
 			return
 		}
 		dev, err := p.getDevice(pkt.GetTarget())
 		if err != nil {
-			common.Log.Errorf("No known device with ID %v\n", pkt.GetTarget())
+			common.Log.Errorf("No known device with ID %v", pkt.GetTarget())
 			return
 		}
-		common.Log.Debugf("Returning packet to device %v: %+v\n", dev.ID(), *pkt)
+		common.Log.Debugf("Returning packet to device %v: %+v", dev.ID(), *pkt)
 		dev.Handle(pkt)
 	}
 }
@@ -423,7 +423,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 func (p *V2) addLocation(pkt *packet.Packet) {
 	l, err := device.NewLocation(pkt)
 	if err != nil {
-		common.Log.Errorf("Error parsing location: %v\n", err)
+		common.Log.Errorf("Error parsing location: %v", err)
 		return
 	}
 	p.RLock()
@@ -434,12 +434,12 @@ func (p *V2) addLocation(pkt *packet.Packet) {
 		p.locations[l.ID()] = l
 		p.Unlock()
 		if err := p.publish(common.EventNewLocation{Location: l}); err != nil {
-			common.Log.Errorf("Error adding location to client: %v\n", err)
+			common.Log.Errorf("Error adding location to client: %v", err)
 			return
 		}
 	} else {
 		if err := location.Parse(pkt); err != nil {
-			common.Log.Errorf("Error parsing location: %v\n", err)
+			common.Log.Errorf("Error parsing location: %v", err)
 		}
 	}
 }
@@ -447,7 +447,7 @@ func (p *V2) addLocation(pkt *packet.Packet) {
 func (p *V2) addGroup(pkt *packet.Packet) {
 	g, err := device.NewGroup(pkt)
 	if err != nil {
-		common.Log.Errorf("Error parsing group: %v\n", err)
+		common.Log.Errorf("Error parsing group: %v", err)
 		return
 	}
 	p.RLock()
@@ -458,12 +458,12 @@ func (p *V2) addGroup(pkt *packet.Packet) {
 		p.groups[g.ID()] = g
 		p.Unlock()
 		if err := p.publish(common.EventNewGroup{Group: g}); err != nil {
-			common.Log.Errorf("Error adding group to client: %v\n", err)
+			common.Log.Errorf("Error adding group to client: %v", err)
 			return
 		}
 	} else {
 		if err := group.Parse(pkt); err != nil {
-			common.Log.Errorf("Error parsing group: %v\n", err)
+			common.Log.Errorf("Error parsing group: %v", err)
 		}
 	}
 }
@@ -474,20 +474,22 @@ func (p *V2) addDevices() {
 		// Perform state discovery on lights
 		if l, ok := dev.(*device.Light); ok {
 			if err := l.Get(); err != nil {
-				common.Log.Debugf("Failed getting light state: %v\n", err)
+				common.Log.Debugf("Failed getting light state: %v", err)
 			}
 		}
 	}
 }
 
 func (p *V2) addDevice(dev device.GenericDevice) {
-	common.Log.Debugf("Attempting to add device: %v\n", dev.ID())
+	common.Log.Debugf("Attempting to add device: %v", dev.ID())
 	d, err := p.getDevice(dev.ID())
 	known := err == nil
 	if known {
 		dev = d
 	} else {
-		// We don't know this device, add it now and possibly overwrite it later
+		// We don't know this device, add it now and possibly overwrite it
+		// later, this is necessary so that we can deliver responses to queries
+		// for device type information
 		p.Lock()
 		p.devices[dev.ID()] = dev
 		p.Unlock()
@@ -495,79 +497,80 @@ func (p *V2) addDevice(dev device.GenericDevice) {
 
 	if _, ok := dev.(*device.Light); !ok {
 		// Determine light or device if we don't have a light
-		dev = p.lightOrDev(dev)
+		dev = p.classifyDevice(dev)
 	}
 
 	p.updateLocationGroup(dev)
 
 	if known {
-		common.Log.Debugf("Device already known: %v\n", dev.ID())
+		common.Log.Debugf("Device already known: %v", dev.ID())
 		return
 	}
 
 	sub, err := dev.NewSubscription()
 	if err != nil {
-		common.Log.Warnf("Error obtaining subscription from %v\n", dev.ID())
+		common.Log.Warnf("Error obtaining subscription from %v", dev.ID())
 	} else {
 		go p.broadcastLimiter(sub.Events())
 	}
 
-	common.Log.Debugf("Adding device to client: %v\n", dev.ID())
+	common.Log.Debugf("Adding device to client: %v", dev.ID())
 	if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
-		common.Log.Errorf("Error adding device to client: %v\n", err)
+		common.Log.Errorf("Error adding device to client: %v", err)
 		return
 	}
-	common.Log.Debugf("Added device to client: %v\n", dev.ID())
+	common.Log.Debugf("Added device to client: %v", dev.ID())
 }
 
 func (p *V2) updateLocationGroup(dev device.GenericDevice) {
 	locationID, err := dev.GetLocation()
 	if err != nil {
-		common.Log.Warnf("Error retrieving device location: %v\n", err)
+		common.Log.Warnf("Error retrieving device location: %v", err)
 		return
 	}
 	p.RLock()
 	location, ok := p.locations[locationID]
 	p.RUnlock()
 	if !ok {
-		common.Log.Warnf("Unknown location ID: %v\n", locationID)
+		common.Log.Warnf("Unknown location ID: %v", locationID)
 		return
 	}
 
 	groupID, err := dev.GetGroup()
 	if err != nil {
-		common.Log.Warnf("Error retrieving device group: %v\n", err)
+		common.Log.Warnf("Error retrieving device group: %v", err)
 		return
 	}
 	p.RLock()
 	group, ok := p.groups[groupID]
 	p.RUnlock()
 	if !ok {
-		common.Log.Warnf("Unknown group ID: %v\n", groupID)
+		common.Log.Warnf("Unknown group ID: %v", groupID)
 		return
 	}
 
-	common.Log.Debugf("Adding device to location (%s): %v\n", locationID, dev.ID())
+	common.Log.Debugf("Adding device to location (%s): %v", locationID, dev.ID())
 	if err := location.AddDevice(dev); err != nil {
-		common.Log.Debugf("Error adding device to location: %v\n", err)
+		common.Log.Debugf("Error adding device to location: %v", err)
 	}
-	common.Log.Debugf("Adding device to group (%s): %v\n", groupID, dev.ID())
+	common.Log.Debugf("Adding device to group (%s): %v", groupID, dev.ID())
 	if err := group.AddDevice(dev); err != nil {
-		common.Log.Debugf("Error adding device to group: %v\n", err)
+		common.Log.Debugf("Error adding device to group: %v", err)
 	}
 }
 
-// lightOrDev either constructs a device.Light from the passed dev, or returns
+// classifyDevice either constructs a device.Light from the passed dev, or returns
 // the dev untouched
-func (p *V2) lightOrDev(dev device.GenericDevice) device.GenericDevice {
+func (p *V2) classifyDevice(dev device.GenericDevice) device.GenericDevice {
+	common.Log.Debugf("Attempting to determine device type for: %d", dev.ID())
 	vendor, err := dev.GetHardwareVendor()
 	if err != nil {
-		common.Log.Errorf("Error retrieving device hardware vendor: %v\n", err)
+		common.Log.Errorf("Error retrieving device hardware vendor: %v", err)
 		return dev
 	}
 	product, err := dev.GetHardwareProduct()
 	if err != nil {
-		common.Log.Errorf("Error retrieving device hardware product: %v\n", err)
+		common.Log.Errorf("Error retrieving device hardware product: %v", err)
 		return dev
 	}
 
@@ -579,13 +582,13 @@ func (p *V2) lightOrDev(dev device.GenericDevice) device.GenericDevice {
 			d := dev.(*device.Device)
 			d.Lock()
 			l := &device.Light{Device: d}
-			common.Log.Debugf("Device is a light: %v\n", l.ID())
+			common.Log.Debugf("Device is a light: %v", l.ID())
 			// Replace the known dev with our constructed light
 			p.devices[l.ID()] = l
 			d.Unlock()
 			p.Unlock()
 			if err := l.Get(); err != nil {
-				common.Log.Debugf("Failed getting light state: %v\n", err)
+				common.Log.Debugf("Failed getting light state: %v", err)
 			}
 			return l
 		}

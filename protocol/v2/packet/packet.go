@@ -187,7 +187,7 @@ func (p *Packet) Write() error {
 		byteArr[i] = b
 	}
 
-	common.Log.Debugf("Writing packet data: source %v, type %v, sequence %v, target %v, protocol %v, tagged %v, resRequired %v, ackRequired %v, frameOrigin %b: %+v\n", p.GetSource(), p.GetType(), p.GetSequence(), p.GetTarget(), p.GetProtocol(), p.GetTagged(), p.GetResRequired(), p.GetAckRequired(), p.Frame.OriginTaggedAddressableProtocol, *p)
+	common.Log.Debugf("Writing packet data: source %v, type %v, sequence %v, target %v, protocol %v, tagged %v, resRequired %v, ackRequired %v, frameOrigin %b: %+v", p.GetSource(), p.GetType(), p.GetSequence(), p.GetTarget(), p.GetProtocol(), p.GetTagged(), p.GetResRequired(), p.GetAckRequired(), p.Frame.OriginTaggedAddressableProtocol, *p)
 
 	// Write the packet
 	_, err = p.socket.WriteToUDP(byteArr, p.destination)
