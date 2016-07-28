@@ -112,6 +112,11 @@ func (g *Group) addDeviceSubscription(dev GenericDevice) error {
 			select {
 			case <-g.quitChan:
 				return
+			default:
+			}
+			select {
+			case <-g.quitChan:
+				return
 			case event := <-events:
 				switch event.(type) {
 				case common.EventUpdateColor:

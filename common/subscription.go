@@ -44,6 +44,8 @@ func (s *Subscription) Write(event interface{}) error {
 	default:
 	}
 	select {
+	case <-s.quitChan:
+		return ErrClosed
 	case s.events <- event:
 		return nil
 	case <-timeout:

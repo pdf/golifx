@@ -649,6 +649,11 @@ func (c *Client) subscribe() error {
 			select {
 			case <-c.quitChan:
 				return
+			default:
+			}
+			select {
+			case <-c.quitChan:
+				return
 			case event := <-events:
 				switch event := event.(type) {
 				case common.EventNewDevice:
@@ -700,6 +705,12 @@ func (c *Client) discover() error {
 		tick := time.Tick(c.discoveryInterval)
 		c.RUnlock()
 		for {
+			select {
+			case <-c.quitChan:
+				common.Log.Debugf("Quitting discovery loop")
+				return
+			default:
+			}
 			select {
 			case <-c.quitChan:
 				common.Log.Debugf("Quitting discovery loop")

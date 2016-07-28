@@ -268,6 +268,11 @@ func (p *V2) broadcastLimiter(events <-chan interface{}) {
 		select {
 		case <-p.quitChan:
 			return
+		default:
+		}
+		select {
+		case <-p.quitChan:
+			return
 		case event := <-events:
 			switch event.(type) {
 			case shared.EventBroadcastSent:

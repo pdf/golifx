@@ -705,6 +705,14 @@ func (d *Device) Close() error {
 		return common.ErrClosed
 	default:
 		close(d.quitChan)
+		d.Lock()
+		for seq, ch := range d.responseMap {
+			ch <- packet.Response{Error: common.ErrClosed}
+			close(ch)
+			delete(d.responseMap, seq)
+			delete(d.doneMap, seq)
+		}
+		d.Unlock()
 	}
 
 	return nil
@@ -720,14 +728,11 @@ func (d *Device) handler() {
 	for {
 		select {
 		case <-d.quitChan:
-			d.Lock()
-			for seq, ch := range d.responseMap {
-				ch <- packet.Response{Error: common.ErrClosed}
-				close(ch)
-				delete(d.responseMap, seq)
-				delete(d.doneMap, seq)
-			}
-			d.Unlock()
+			return
+		default:
+		}
+		select {
+		case <-d.quitChan:
 			return
 		case pktResponse := <-d.responseInput:
 			common.Log.Debugf("Handling packet on device %v: %+v", d.id, pktResponse)
