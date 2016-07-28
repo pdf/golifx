@@ -13,6 +13,8 @@ type GenericDevice interface {
 	Close() error
 	Seen() time.Time
 	SetSeen(time.Time)
+	Provisional() bool
+	SetProvisional(bool)
 	SetStatePower(*packet.Packet) error
 	SetStateLabel(*packet.Packet) error
 	SetStateLocation(*packet.Packet) error

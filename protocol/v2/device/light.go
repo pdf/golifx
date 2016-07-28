@@ -50,7 +50,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 	}
 	common.Log.Debugf("Got light state (%v): %+v", l.id, s)
 
-	if s.Color != l.CachedColor() {
+	if !common.ColorEqual(s.Color, l.CachedColor()) {
 		l.Lock()
 		l.color = s.Color
 		l.Unlock()
@@ -97,10 +97,11 @@ func (l *Light) Get() error {
 }
 
 func (l *Light) SetColor(color common.Color, duration time.Duration) error {
-	if color != l.CachedColor() {
+	if common.ColorEqual(color, l.CachedColor()) {
 		return nil
 	}
 
+	common.Log.Debugf("Setting color on %v", l.id)
 	if duration < shared.RateLimit {
 		duration = shared.RateLimit
 	}

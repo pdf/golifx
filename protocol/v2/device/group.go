@@ -241,7 +241,7 @@ func (g *Group) getColor(cached bool) (common.Color, error) {
 	g.Unlock()
 	g.RLock()
 	defer g.RUnlock()
-	if lastColor != g.color {
+	if !common.ColorEqual(lastColor, g.color) {
 		err = g.publish(common.EventUpdateColor{Color: g.color})
 		if err != nil {
 			return g.color, err

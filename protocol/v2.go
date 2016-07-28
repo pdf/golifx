@@ -495,8 +495,8 @@ func (p *V2) addDevice(dev device.GenericDevice) {
 		p.Unlock()
 	}
 
-	if _, ok := dev.(*device.Light); !ok {
-		// Determine light or device if we don't have a light
+	if dev.Provisional() {
+		// Determine device type
 		dev = p.classifyDevice(dev)
 	}
 
@@ -574,6 +574,8 @@ func (p *V2) classifyDevice(dev device.GenericDevice) device.GenericDevice {
 		return dev
 	}
 
+	defer dev.SetProvisional(false)
+
 	switch vendor {
 	case device.VendorLifx:
 		switch product {
@@ -587,9 +589,6 @@ func (p *V2) classifyDevice(dev device.GenericDevice) device.GenericDevice {
 			p.devices[l.ID()] = l
 			d.Unlock()
 			p.Unlock()
-			if err := l.Get(); err != nil {
-				common.Log.Debugf("Failed getting light state: %v", err)
-			}
 			return l
 		}
 	}

@@ -68,6 +68,7 @@ type Device struct {
 	hardwareVersion       stateVersion
 	firmwareVersion       uint32
 	firmwareVersionString string
+	provisional           bool
 
 	locationID string
 	groupID    string
@@ -137,6 +138,7 @@ func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *ti
 	d.responseInput = make(packet.Chan, 32)
 	d.subscriptions = make(map[string]*common.Subscription)
 	d.quitChan = make(chan struct{})
+	d.provisional = true
 	d.Unlock()
 }
 
@@ -174,6 +176,18 @@ func (d *Device) CloseSubscription(sub *common.Subscription) error {
 	d.Unlock()
 
 	return nil
+}
+
+func (d *Device) Provisional() bool {
+	d.RLock()
+	defer d.RUnlock()
+	return d.provisional
+}
+
+func (d *Device) SetProvisional(provisional bool) {
+	d.Lock()
+	d.provisional = provisional
+	d.Unlock()
 }
 
 func (d *Device) SetStateLabel(pkt *packet.Packet) error {
