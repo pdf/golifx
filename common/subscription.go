@@ -1,6 +1,7 @@
 package common
 
 import (
+	"sync"
 	"time"
 
 	"github.com/satori/go.uuid"
@@ -20,6 +21,7 @@ type SubscriptionTarget interface {
 type Subscription struct {
 	events   chan interface{}
 	quitChan chan struct{}
+	wg       sync.WaitGroup
 	id       uuid.UUID
 	target   SubscriptionTarget
 }
@@ -37,6 +39,8 @@ func (s *Subscription) Events() <-chan interface{} {
 
 // Write pushes an event onto the events channel
 func (s *Subscription) Write(event interface{}) error {
+	s.wg.Add(1)
+	defer s.wg.Done()
 	timeout := time.After(DefaultTimeout)
 	select {
 	case <-s.quitChan:
@@ -49,6 +53,7 @@ func (s *Subscription) Write(event interface{}) error {
 	case s.events <- event:
 		return nil
 	case <-timeout:
+		Log.Debugf("Timeout on subscription %s", s.ID)
 		return ErrTimeout
 	}
 }
@@ -59,10 +64,11 @@ func (s *Subscription) Write(event interface{}) error {
 func (s *Subscription) Close() error {
 	select {
 	case <-s.quitChan:
-		Log.Warnf(`subscription already closed`)
+		Log.Warnf("Subscription %s already closed", s.ID)
 		return ErrClosed
 	default:
 		close(s.quitChan)
+		s.wg.Wait()
 		close(s.events)
 	}
 	return s.target.CloseSubscription(s)

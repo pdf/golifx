@@ -48,7 +48,7 @@ func (l *Light) SetState(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(s); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got light state (%v): %+v", l.id, s)
+	common.Log.Debugf("Got light state (%d): %+v", l.id, s)
 
 	if !common.ColorEqual(s.Color, l.CachedColor()) {
 		l.Lock()
@@ -87,7 +87,7 @@ func (l *Light) Get() error {
 		return err
 	}
 
-	common.Log.Debugf("Waiting for light state (%v)", l.id)
+	common.Log.Debugf("Waiting for light state (%d)", l.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return pktResponse.Error
@@ -101,7 +101,7 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 		return nil
 	}
 
-	common.Log.Debugf("Setting color on %v", l.id)
+	common.Log.Debugf("Setting color on %d", l.id)
 	if duration < shared.RateLimit {
 		duration = shared.RateLimit
 	}
@@ -122,7 +122,7 @@ func (l *Light) SetColor(color common.Color, duration time.Duration) error {
 	if l.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting color on %v acknowledged", l.id)
+		common.Log.Debugf("Setting color on %d acknowledged", l.id)
 	}
 
 	l.Lock()
@@ -161,7 +161,7 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 		return err
 	}
 
-	common.Log.Debugf("Setting power state on %v: %v", l.id, state)
+	common.Log.Debugf("Setting power state on %d: %v", l.id, state)
 	req, err := l.Send(pkt, l.reliable, false)
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
 	if l.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting power state on %v acknowledged", l.id)
+		common.Log.Debugf("Setting power state on %d acknowledged", l.id)
 	}
 
 	l.Lock()

@@ -56,9 +56,14 @@ const (
 	ProductLifxColor1000           uint32 = 22
 )
 
+type response struct {
+	ch   packet.Chan
+	done doneChan
+	wg   sync.WaitGroup
+}
+
 type doneChan chan struct{}
-type responseMap map[uint8]packet.Chan
-type doneMap map[uint8]doneChan
+type responseMap map[uint8]response
 
 type Device struct {
 	id                    uint64
@@ -76,7 +81,6 @@ type Device struct {
 	sequence      uint8
 	requestSocket *net.UDPConn
 	responseMap   responseMap
-	doneMap       doneMap
 	responseInput packet.Chan
 	subscriptions map[string]*common.Subscription
 	quitChan      chan struct{}
@@ -134,7 +138,6 @@ func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *ti
 	d.reliable = reliable
 	d.limiter = time.NewTimer(shared.RateLimit)
 	d.responseMap = make(responseMap)
-	d.doneMap = make(doneMap)
 	d.responseInput = make(packet.Chan, 32)
 	d.subscriptions = make(map[string]*common.Subscription)
 	d.quitChan = make(chan struct{})
@@ -195,7 +198,7 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&l); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got label (%v): %+v", d.id, l.Label)
+	common.Log.Debugf("Got label (%d): %v", d.id, l.Label)
 	newLabel := stripNull(string(l.Label[:]))
 	if newLabel != d.CachedLabel() {
 		d.Lock()
@@ -214,7 +217,7 @@ func (d *Device) SetStateLocation(pkt *packet.Packet) error {
 	if err := l.Parse(pkt); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got location (%v): %+v (%+v)", d.id, l.ID(), l.GetLabel())
+	common.Log.Debugf("Got location (%d): %s (%s)", d.id, l.ID(), l.GetLabel())
 	newLocation := l.ID()
 	if newLocation != d.CachedLocation() {
 		d.Lock()
@@ -228,12 +231,12 @@ func (d *Device) SetStateLocation(pkt *packet.Packet) error {
 }
 
 func (d *Device) SetStateGroup(pkt *packet.Packet) error {
-	l := &Group{}
-	if err := l.Parse(pkt); err != nil {
+	g := &Group{}
+	if err := g.Parse(pkt); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got group (%v): %+v (%+v)", d.id, l.ID(), l.GetLabel())
-	newGroup := l.ID()
+	common.Log.Debugf("Got group (%d): %s (%s)", d.id, g.ID(), g.GetLabel())
+	newGroup := g.ID()
 	if newGroup != d.CachedGroup() {
 		d.Lock()
 		d.groupID = newGroup
@@ -250,7 +253,7 @@ func (d *Device) SetStateHostFirmware(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&f); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got firmware version (%v): %+v", d.id, f.Version)
+	common.Log.Debugf("Got firmware version (%d): %d", d.id, f.Version)
 	d.RLock()
 	version := d.firmwareVersion
 	d.RUnlock()
@@ -277,7 +280,7 @@ func (d *Device) GetLabel() (string, error) {
 		return ``, err
 	}
 
-	common.Log.Debugf("Waiting for label (%v)", d.id)
+	common.Log.Debugf("Waiting for label (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ``, err
@@ -305,7 +308,7 @@ func (d *Device) SetLabel(label string) error {
 		return err
 	}
 
-	common.Log.Debugf("Setting label on %v: %v", d.id, label)
+	common.Log.Debugf("Setting label on %d: %s", d.id, label)
 	req, err := d.Send(pkt, d.reliable, false)
 	if err != nil {
 		return err
@@ -313,7 +316,7 @@ func (d *Device) SetLabel(label string) error {
 	if d.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting label on %v acknowledged", d.id)
+		common.Log.Debugf("Setting label on %d acknowledged", d.id)
 	}
 
 	d.Lock()
@@ -333,7 +336,7 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&p); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got power (%v): %+v", d.id, d.power)
+	common.Log.Debugf("Got power (%d): %d", d.id, d.power)
 
 	state := p.Level > 0
 	if d.CachedPower() != state {
@@ -356,7 +359,7 @@ func (d *Device) GetPower() (bool, error) {
 		return false, err
 	}
 
-	common.Log.Debugf("Waiting for power (%v)", d.id)
+	common.Log.Debugf("Waiting for power (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return false, err
@@ -392,7 +395,7 @@ func (d *Device) SetPower(state bool) error {
 		return err
 	}
 
-	common.Log.Debugf("Setting power state on %v: %v", d.id, state)
+	common.Log.Debugf("Setting power state on %d: %v", d.id, state)
 	req, err := d.Send(pkt, d.reliable, false)
 	if err != nil {
 		return err
@@ -400,7 +403,7 @@ func (d *Device) SetPower(state bool) error {
 	if d.reliable {
 		// Wait for ack
 		<-req
-		common.Log.Debugf("Setting power state on %v acknowledged", d.id)
+		common.Log.Debugf("Setting power state on %d acknowledged", d.id)
 	}
 
 	d.Lock()
@@ -423,7 +426,7 @@ func (d *Device) GetLocation() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for location (%v)", d.id)
+	common.Log.Debugf("Waiting for location (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -451,7 +454,7 @@ func (d *Device) GetGroup() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for group (%v)", d.id)
+	common.Log.Debugf("Waiting for group (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -503,7 +506,7 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 		return 0, err
 	}
 
-	common.Log.Debugf("Waiting for hardware version (%v)", d.id)
+	common.Log.Debugf("Waiting for hardware version (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return 0, err
@@ -513,7 +516,7 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 	if err = pktResponse.Result.DecodePayload(&v); err != nil {
 		return 0, err
 	}
-	common.Log.Debugf("Got hardware version (%v): %+v", d.id, v)
+	common.Log.Debugf("Got hardware version (%d): %+v", d.id, v)
 
 	d.Lock()
 	d.hardwareVersion = v
@@ -554,7 +557,7 @@ func (d *Device) GetFirmwareVersion() (ret string, err error) {
 		return ret, err
 	}
 
-	common.Log.Debugf("Waiting for firmware data (%v)", d.id)
+	common.Log.Debugf("Waiting for firmware data (%d)", d.id)
 	pktResponse := <-req
 	if pktResponse.Error != nil {
 		return ret, err
@@ -585,11 +588,11 @@ func (d *Device) ResetLimiter() {
 func (d *Device) resetLimiter(broadcast bool) {
 	if broadcast {
 		if err := d.publish(shared.EventRequestSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventRequestSent on dev %+v: %+v", d.id, err)
+			common.Log.Warnf("Failed publishing EventRequestSent on dev %d: %+v", d.id, err)
 		}
 	} else {
 		if err := d.publish(shared.EventBroadcastSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %+v: %+v", d.id, err)
+			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %d: %+v", d.id, err)
 		}
 	}
 	d.ResetLimiter()
@@ -616,12 +619,13 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 			pkt.SetResRequired(true)
 		}
 		if ackRequired || responseRequired {
-			seq, input, done := d.addSeq()
+			seq, res := d.addSeq()
 			pkt.SetSequence(seq)
 
 			go func() {
 				defer func() {
-					close(done)
+					close(res.done)
+					close(proxyChan)
 				}()
 
 				var (
@@ -637,14 +641,15 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 				for {
 					select {
-					case pktResponse, ok := <-input:
+					case pktResponse, ok := <-res.ch:
 						if !ok {
-							close(proxyChan)
 							return
 						}
 						if pktResponse.Result.GetType() == Acknowledgement {
 							common.Log.Debugf("Got ACK for seq %d on device %d, cancelling retries", seq, d.ID())
 							ticker.Stop()
+							// Ack does not resolve outstanding request,
+							// continue waiting for response
 							if responseRequired {
 								continue
 							}
@@ -653,16 +658,16 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 						return
 					case <-ticker.C:
 						common.Log.Debugf("Retrying send for seq %d on device %d after %d milliseconds", seq, d.ID(), *d.retryInterval/time.Millisecond)
-						pktResponse := packet.Response{}
 						if err := pkt.Write(); err != nil {
-							pktResponse.Error = err
-							proxyChan <- pktResponse
+							proxyChan <- packet.Response{
+								Error: err,
+							}
 							return
 						}
 					case <-timeout:
-						pktResponse := packet.Response{}
-						pktResponse.Error = common.ErrTimeout
-						proxyChan <- pktResponse
+						proxyChan <- packet.Response{
+							Error: common.ErrTimeout,
+						}
 						return
 					}
 				}
@@ -706,11 +711,12 @@ func (d *Device) Close() error {
 	default:
 		close(d.quitChan)
 		d.Lock()
-		for seq, ch := range d.responseMap {
-			ch <- packet.Response{Error: common.ErrClosed}
-			close(ch)
+		for seq, res := range d.responseMap {
+			res.ch <- packet.Response{Error: common.ErrClosed}
+			res.wg.Wait()
+			close(res.ch)
+			close(res.done)
 			delete(d.responseMap, seq)
-			delete(d.doneMap, seq)
 		}
 		d.Unlock()
 	}
@@ -720,9 +726,8 @@ func (d *Device) Close() error {
 
 func (d *Device) handler() {
 	var (
-		ok   bool
-		ch   packet.Chan
-		done chan struct{}
+		ok  bool
+		res response
 	)
 
 	for {
@@ -735,62 +740,60 @@ func (d *Device) handler() {
 		case <-d.quitChan:
 			return
 		case pktResponse := <-d.responseInput:
-			common.Log.Debugf("Handling packet on device %v: %+v", d.id, pktResponse)
+			common.Log.Debugf("Handling packet on device %d", d.id)
 			seq := pktResponse.Result.GetSequence()
-			ch, done, ok = d.getSeq(seq)
+			res, ok = d.getSeq(seq)
 			if !ok {
-				common.Log.Warnf("Couldn't find requestor for seq %v on device %v: %+v", seq, d.id, pktResponse)
+				common.Log.Warnf("Couldn't find requestor for seq %d on device %d", seq, d.id)
 				continue
 			}
-			common.Log.Debugf("Returning packet to caller on device %v: %+v", d.id, pktResponse)
+			common.Log.Debugf("Returning packet to for seq %d to caller on device %d", seq, d.id)
+			res.wg.Add(1)
 			select {
-			case ch <- pktResponse:
-			case <-done:
+			case res.ch <- pktResponse:
+				res.wg.Done()
+			case <-res.done:
+				res.wg.Done()
 				d.delSeq(seq)
 			}
 		}
 	}
 }
 
-func (d *Device) addSeq() (seq uint8, input packet.Chan, done doneChan) {
-	input = make(packet.Chan)
-	done = make(doneChan)
-
+func (d *Device) addSeq() (seq uint8, res response) {
 	d.Lock()
 	d.sequence++
 	if d.sequence == 0 {
 		d.sequence++
 	}
 	seq = d.sequence
-	d.responseMap[seq] = input
-	d.doneMap[seq] = done
+	res = response{
+		ch:   make(packet.Chan),
+		done: make(doneChan),
+	}
+	d.responseMap[seq] = res
 	d.Unlock()
 
-	return seq, input, done
+	return seq, res
 }
 
-func (d *Device) getSeq(seq uint8) (ch packet.Chan, done doneChan, ok bool) {
+func (d *Device) getSeq(seq uint8) (res response, ok bool) {
 	d.RLock()
-	ch, ok = d.responseMap[seq]
-	if !ok {
-		d.RUnlock()
-		return nil, nil, false
-	}
-	done, ok = d.doneMap[seq]
-	d.RUnlock()
+	defer d.RUnlock()
+	res, ok = d.responseMap[seq]
 
-	return ch, done, ok
+	return res, ok
 }
 
 func (d *Device) delSeq(seq uint8) {
-	ch, _, ok := d.getSeq(seq)
+	res, ok := d.getSeq(seq)
 	if !ok {
 		return
 	}
 	d.Lock()
-	close(ch)
+	res.wg.Wait()
+	close(res.ch)
 	delete(d.responseMap, seq)
-	delete(d.doneMap, seq)
 	d.Unlock()
 }
 

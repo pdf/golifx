@@ -26,6 +26,7 @@ type V2 struct {
 	broadcast     *device.Light
 	lastDiscovery time.Time
 	deviceQueue   chan device.GenericDevice
+	wg            sync.WaitGroup
 	devices       map[uint64]device.GenericDevice
 	subscriptions map[string]*common.Subscription
 	locations     map[string]*device.Location
@@ -258,6 +259,8 @@ func (p *V2) Close() error {
 		return common.ErrClosed
 	default:
 		close(p.quitChan)
+		p.wg.Done()
+		close(p.deviceQueue)
 	}
 
 	return nil
@@ -409,6 +412,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 				return
 			}
 		}
+		p.wg.Add(1)
 		p.deviceQueue <- dev
 	default:
 		if pkt.GetTarget() == 0 {
@@ -476,6 +480,7 @@ func (p *V2) addGroup(pkt *packet.Packet) {
 func (p *V2) addDevices() {
 	for dev := range p.deviceQueue {
 		p.addDevice(dev)
+		p.wg.Done()
 		// Perform state discovery on lights
 		if l, ok := dev.(*device.Light); ok {
 			if err := l.Get(); err != nil {
