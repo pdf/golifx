@@ -204,19 +204,51 @@ func (p *V2) Discover() error {
 
 // SetPower sets the power state globally, on all devices
 func (p *V2) SetPower(state bool) error {
-	return p.broadcast.SetPower(state)
+	p.RLock()
+	defer p.RUnlock()
+	for _, dev := range p.devices {
+		if err := dev.SetPower(state); err != nil {
+			common.Log.Warnf("Failed setting power on %d: %+v", dev.ID(), err)
+			continue
+		}
+	}
+	return nil
 }
 
 // SetPowerDuration sets the power state globally, on all devices, transitioning
 // over the specified duration
 func (p *V2) SetPowerDuration(state bool, duration time.Duration) error {
-	return p.broadcast.SetPowerDuration(state, duration)
+	p.RLock()
+	defer p.RUnlock()
+	for _, dev := range p.devices {
+		l, ok := dev.(*device.Light)
+		if !ok {
+			continue
+		}
+		if err := l.SetPowerDuration(state, duration); err != nil {
+			common.Log.Warnf("Failed setting power on %d: %+v", l.ID(), err)
+			continue
+		}
+	}
+	return nil
 }
 
 // SetColor changes the color globally, on all lights, transitioning over the
 // specified duration
 func (p *V2) SetColor(color common.Color, duration time.Duration) error {
-	return p.broadcast.SetColor(color, duration)
+	p.RLock()
+	defer p.RUnlock()
+	for _, dev := range p.devices {
+		l, ok := dev.(*device.Light)
+		if !ok {
+			continue
+		}
+		if err := l.SetColor(color, duration); err != nil {
+			common.Log.Warnf("Failed setting color on %d: %+v", l.ID(), err)
+			continue
+		}
+	}
+	return nil
 }
 
 // Close closes the protocol driver, no further communication with the protocol
