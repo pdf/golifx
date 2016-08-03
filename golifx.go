@@ -34,16 +34,14 @@ const (
 func NewClient(p common.Protocol) (*Client, error) {
 	c := &Client{
 		protocol:              p,
-		devices:               make(map[uint64]common.Device),
-		locations:             make(map[string]common.Location),
-		groups:                make(map[string]common.Group),
 		subscriptions:         make(map[string]*common.Subscription),
 		timeout:               common.DefaultTimeout,
 		retryInterval:         common.DefaultRetryInterval,
 		internalRetryInterval: 10 * time.Millisecond,
 		quitChan:              make(chan struct{}, 2),
 	}
-	p.SetClient(c)
+	c.protocol.SetTimeout(&c.timeout)
+	c.protocol.SetRetryInterval(&c.retryInterval)
 	err := c.discover()
 	return c, err
 }

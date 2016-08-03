@@ -17,175 +17,22 @@ type Client struct {
 	timeout               time.Duration
 	retryInterval         time.Duration
 	internalRetryInterval time.Duration
-	devices               map[uint64]common.Device
-	locations             map[string]common.Location
-	groups                map[string]common.Group
 	subscriptions         map[string]*common.Subscription
 	sync.RWMutex
-}
-
-// addDevice adds dev to the client's known devices.  Returns
-// common.ErrDuplicate if the device is already known.
-func (c *Client) addDevice(dev common.Device) error {
-	id := dev.ID()
-	c.RLock()
-	_, ok := c.devices[id]
-	c.RUnlock()
-	if ok {
-		return common.ErrDuplicate
-	}
-
-	c.Lock()
-	c.devices[id] = dev
-	c.Unlock()
-
-	err := c.publish(common.EventNewDevice{Device: dev})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
-}
-
-// addLocation adds location to the client's known locations.  Returns
-// common.ErrDuplicate if the location is already known.
-func (c *Client) addLocation(location common.Location) error {
-	id := location.ID()
-	c.RLock()
-	_, ok := c.locations[id]
-	c.RUnlock()
-	if ok {
-		return common.ErrDuplicate
-	}
-
-	c.Lock()
-	c.locations[id] = location
-	c.Unlock()
-
-	err := c.publish(common.EventNewLocation{Location: location})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
-}
-
-// addGroup adds group to the client's known groups.  Returns
-// common.ErrDuplicate if the group is already known.
-func (c *Client) addGroup(group common.Group) error {
-	id := group.ID()
-	c.RLock()
-	_, ok := c.groups[id]
-	c.RUnlock()
-	if ok {
-		return common.ErrDuplicate
-	}
-
-	c.Lock()
-	c.groups[id] = group
-	c.Unlock()
-
-	err := c.publish(common.EventNewGroup{Group: group})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
-}
-
-// removeLocationByID looks up a location by its `id` and removes it from the
-// client's list of known locations, or returns common.ErrNotFound if the
-// location is not known at this time.
-func (c *Client) removeLocationByID(id string) error {
-	c.RLock()
-	location, ok := c.locations[id]
-	c.RUnlock()
-	if !ok {
-		return common.ErrNotFound
-	}
-
-	c.Lock()
-	delete(c.locations, id)
-	c.Unlock()
-
-	err := c.publish(common.EventExpiredLocation{Location: location})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
-}
-
-// removeGroupByID looks up a group by its `id` and removes it from the client's
-// list of known groups, or returns common.ErrNotFound if the group is not known
-// at this time.
-func (c *Client) removeGroupByID(id string) error {
-	c.RLock()
-	group, ok := c.groups[id]
-	c.RUnlock()
-	if !ok {
-		return common.ErrNotFound
-	}
-
-	c.Lock()
-	delete(c.groups, id)
-	c.Unlock()
-
-	err := c.publish(common.EventExpiredGroup{Group: group})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
-}
-
-// removeDeviceByID looks up a device by its `id` and removes it from the
-// client's list of known devices, or returns common.ErrNotFound if the device
-// is not known at this time.
-func (c *Client) removeDeviceByID(id uint64) error {
-	c.RLock()
-	dev, ok := c.devices[id]
-	c.RUnlock()
-	if !ok {
-		return common.ErrNotFound
-	}
-
-	c.Lock()
-	delete(c.devices, id)
-	c.Unlock()
-
-	err := c.publish(common.EventExpiredDevice{Device: dev})
-	if err != nil {
-		common.Log.Warnf("Failed publishing event: %v\n", err)
-	}
-
-	return nil
 }
 
 // GetLocations returns a slice of all locations known to the client, or
 // common.ErrNotFound if no locations are currently known.
 func (c *Client) GetLocations() (locations []common.Location, err error) {
-	c.RLock()
-	if len(c.locations) == 0 {
-		c.RUnlock()
-		return locations, common.ErrNotFound
-	}
-	for _, location := range c.locations {
-		locations = append(locations, location)
-	}
-	c.RUnlock()
-
-	return locations, nil
+	return c.protocol.GetLocations()
 }
 
 // GetLocationByID looks up a location by its `id` and returns a common.Location.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the location.
 func (c *Client) GetLocationByID(id string) (common.Location, error) {
-	c.RLock()
-	location, ok := c.locations[id]
-	c.RUnlock()
-	if ok {
+	location, err := c.protocol.GetLocation(id)
+	if err != nil {
 		return location, nil
 	}
 
@@ -200,14 +47,22 @@ func (c *Client) GetLocationByID(id string) (common.Location, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing location subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewLocation:
-				if event.Location.ID() == id {
+				if id == event.Location.ID() {
 					return event.Location, nil
 				}
 			}
@@ -222,9 +77,9 @@ func (c *Client) GetLocationByID(id string) (common.Location, error) {
 // out without finding the location.
 func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
 	locations, _ := c.GetLocations()
-	for _, dev := range locations {
-		if label == dev.GetLabel() {
-			return dev, nil
+	for _, location := range locations {
+		if label == location.GetLabel() {
+			return location, nil
 		}
 	}
 
@@ -239,11 +94,19 @@ func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing location subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewLocation:
 				if label == event.Location.GetLabel() {
@@ -259,27 +122,15 @@ func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
 // GetGroups returns a slice of all groups known to the client, or
 // common.ErrNotFound if no groups are currently known.
 func (c *Client) GetGroups() (groups []common.Group, err error) {
-	c.RLock()
-	if len(c.groups) == 0 {
-		c.RUnlock()
-		return groups, common.ErrNotFound
-	}
-	for _, group := range c.groups {
-		groups = append(groups, group)
-	}
-	c.RUnlock()
-
-	return groups, nil
+	return c.protocol.GetGroups()
 }
 
 // GetGroupByID looks up a group by its `id` and returns a common.Group.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the group.
 func (c *Client) GetGroupByID(id string) (common.Group, error) {
-	c.RLock()
-	group, ok := c.groups[id]
-	c.RUnlock()
-	if ok {
+	group, err := c.protocol.GetGroup(id)
+	if err == nil {
 		return group, nil
 	}
 
@@ -294,14 +145,22 @@ func (c *Client) GetGroupByID(id string) (common.Group, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing group subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewGroup:
-				if event.Group.ID() == id {
+				if id == event.Group.ID() {
 					return event.Group, nil
 				}
 			}
@@ -333,11 +192,19 @@ func (c *Client) GetGroupByLabel(label string) (common.Group, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing group subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewGroup:
 				if label == event.Group.GetLabel() {
@@ -353,27 +220,15 @@ func (c *Client) GetGroupByLabel(label string) (common.Group, error) {
 // GetDevices returns a slice of all devices known to the client, or
 // common.ErrNotFound if no devices are currently known.
 func (c *Client) GetDevices() (devices []common.Device, err error) {
-	c.RLock()
-	if len(c.devices) == 0 {
-		c.RUnlock()
-		return devices, common.ErrNotFound
-	}
-	for _, device := range c.devices {
-		devices = append(devices, device)
-	}
-	c.RUnlock()
-
-	return devices, nil
+	return c.protocol.GetDevices()
 }
 
 // GetDeviceByID looks up a device by its `id` and returns a common.Device.
 // May return a common.ErrNotFound error if the lookup times out without finding
 // the device.
 func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
-	c.RLock()
-	dev, ok := c.devices[id]
-	c.RUnlock()
-	if ok {
+	dev, err := c.protocol.GetDevice(id)
+	if err == nil {
 		return dev, nil
 	}
 
@@ -388,14 +243,22 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing device subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewDevice:
-				if event.Device.ID() == id {
+				if id == event.Device.ID() {
 					return event.Device, nil
 				}
 			}
@@ -428,11 +291,19 @@ func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err = sub.Close(); err != nil {
+			common.Log.Warnf("Failed closing device subscription: %+v", err)
+		}
+	}()
 	events := sub.Events()
 
 	for {
 		select {
-		case event := <-events:
+		case event, ok := <-events:
+			if !ok {
+				return nil, common.ErrNotFound
+			}
 			switch event := event.(type) {
 			case common.EventNewDevice:
 				l, err := event.Device.GetLabel()
@@ -564,12 +435,16 @@ func (c *Client) SetRetryInterval(retryInterval time.Duration) {
 	if c.timeout > 0 && retryInterval >= c.timeout {
 		retryInterval = c.timeout / 2
 	}
+	c.Lock()
 	c.retryInterval = retryInterval
+	c.Unlock()
 }
 
 // GetRetryInterval returns the currently configured retry interval for
 // operations on this client
 func (c *Client) GetRetryInterval() *time.Duration {
+	c.RLock()
+	defer c.RUnlock()
 	return &c.retryInterval
 }
 
@@ -620,7 +495,7 @@ func (c *Client) Close() error {
 	return c.protocol.Close()
 }
 
-// Pushes an event to subscribers
+// publish an event to subscribers
 func (c *Client) publish(event interface{}) error {
 	c.RLock()
 	subs := make(map[string]*common.Subscription, len(c.subscriptions))
@@ -638,13 +513,20 @@ func (c *Client) publish(event interface{}) error {
 	return nil
 }
 
+// subscribe to protocol events and proxy to client subscriptions
 func (c *Client) subscribe() error {
 	sub, err := c.protocol.NewSubscription()
 	if err != nil {
 		return err
 	}
 	events := sub.Events()
+
 	go func() {
+		defer func() {
+			if err = sub.Close(); err != nil {
+				common.Log.Warnf("Failed closing protocol subscription: %v", err)
+			}
+		}()
 		for {
 			select {
 			case <-c.quitChan:
@@ -655,34 +537,16 @@ func (c *Client) subscribe() error {
 			case <-c.quitChan:
 				return
 			case event := <-events:
-				switch event := event.(type) {
-				case common.EventNewDevice:
-					if err := c.addDevice(event.Device); err != nil {
-						common.Log.Debugf("Could not add device to client: %v\n", err)
+				switch event.(type) {
+				case common.EventNewDevice,
+					common.EventNewGroup,
+					common.EventNewLocation,
+					common.EventExpiredDevice,
+					common.EventExpiredGroup,
+					common.EventExpiredLocation:
+					if err = c.publish(event); err != nil {
+						common.Log.Warnf("Failed publishing event on client: %v", err)
 					}
-				case common.EventExpiredDevice:
-					if err := c.removeDeviceByID(event.Device.ID()); err != nil {
-						common.Log.Debugf("Could not remove device from client: %v\n", err)
-					}
-				case common.EventNewLocation:
-					if err := c.addLocation(event.Location); err != nil {
-						common.Log.Debugf("Could not add location to client: %v\n", err)
-					}
-				case common.EventExpiredLocation:
-					if err := c.removeLocationByID(event.Location.ID()); err != nil {
-						common.Log.Debugf("Could not remove location from client: %v\n", err)
-					}
-				case common.EventNewGroup:
-					if err := c.addGroup(event.Group); err != nil {
-						common.Log.Debugf("Could not add group to client: %v\n", err)
-					}
-				case common.EventExpiredGroup:
-					if err := c.removeGroupByID(event.Group.ID()); err != nil {
-						common.Log.Debugf("Could not remove group from client: %v\n", err)
-					}
-				default:
-					common.Log.Debugf("Unhandled event on client: %+v\n", event)
-					continue
 				}
 			}
 		}

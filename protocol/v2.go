@@ -20,7 +20,6 @@ type V2 struct {
 	Reliable      bool
 	initialized   bool
 	socket        *net.UDPConn
-	client        common.Client
 	timeout       *time.Duration
 	retryInterval *time.Duration
 	broadcast     *device.Light
@@ -33,12 +32,6 @@ type V2 struct {
 	groups        map[string]*device.Group
 	quitChan      chan struct{}
 	sync.RWMutex
-}
-
-// SetClient sets the client on the protocol for bi-directional communication
-func (p *V2) SetClient(client common.Client) {
-	p.timeout = client.GetTimeout()
-	p.retryInterval = client.GetRetryInterval()
 }
 
 // NewSubscription returns a new *common.Subscription for receiving events from
@@ -132,6 +125,20 @@ func (p *V2) publish(event interface{}) error {
 	return nil
 }
 
+// SetTimeout attaches a timeout to the protocol
+func (p *V2) SetTimeout(timeout *time.Duration) {
+	p.Lock()
+	p.timeout = timeout
+	p.Unlock()
+}
+
+// SetRetryInterval attaches a retry interval to the protocol
+func (p *V2) SetRetryInterval(retryInterval *time.Duration) {
+	p.Lock()
+	p.retryInterval = retryInterval
+	p.Unlock()
+}
+
 // Discover initiates device discovery, this may be a noop in some future
 // protocol versions.  This is called immediately when the client connects to
 // the protocol
@@ -152,41 +159,37 @@ func (p *V2) Discover() error {
 		p.RUnlock()
 		// Remove extinct devices
 		for _, dev := range extinct {
-			p.Lock()
-			delete(p.devices, dev.ID())
-			p.Unlock()
+			p.removeDevice(dev.ID())
 
 			locationID := dev.CachedLocation()
-			p.RLock()
-			location, ok := p.locations[locationID]
-			p.RUnlock()
-			if ok {
-				if err := location.RemoveDevice(dev); err != nil {
-					common.Log.Warnf("Failed removing extinct device '%d' from location (%v): %v", dev.ID(), locationID, err)
+			location, err := p.getLocation(locationID)
+			if err == nil {
+				if err = location.RemoveDevice(dev); err != nil {
+					common.Log.Warnf("Failed removing extinct device '%d' from location (%s): %v", dev.ID(), locationID, err)
 				}
 				if len(location.Devices()) == 0 {
-					if err := p.publish(common.EventExpiredLocation{Location: location}); err != nil {
-						common.Log.Warnf("Failed publishing expired event for device '%d'", dev.ID())
+					p.removeLocation(location.ID())
+					if err = p.publish(common.EventExpiredLocation{Location: location}); err != nil {
+						common.Log.Warnf("Failed publishing expired event for location '%s'", locationID)
 					}
 				}
 			}
 
 			groupID := dev.CachedGroup()
-			p.RLock()
-			group, ok := p.groups[groupID]
-			p.RUnlock()
-			if ok {
-				if err := group.RemoveDevice(dev); err != nil {
-					common.Log.Warnf("Failed removing extinct device '%d' from group (%v): %v", dev.ID(), groupID, err)
+			group, err := p.getGroup(groupID)
+			if err == nil {
+				if err = group.RemoveDevice(dev); err != nil {
+					common.Log.Warnf("Failed removing extinct device '%d' from group (%s): %v", dev.ID(), groupID, err)
 				}
 				if len(group.Devices()) == 0 {
-					if err := p.publish(common.EventExpiredGroup{Group: group}); err != nil {
-						common.Log.Warnf("Failed publishing expired event for group '%v'", groupID)
+					p.removeGroup(group.ID())
+					if err = p.publish(common.EventExpiredGroup{Group: group}); err != nil {
+						common.Log.Warnf("Failed publishing expired event for group '%s'", groupID)
 					}
 				}
 			}
 
-			err := p.publish(common.EventExpiredDevice{Device: dev})
+			err = p.publish(common.EventExpiredDevice{Device: dev})
 			if err != nil {
 				common.Log.Warnf("Failed removing extinct device '%d' from client: %v", dev.ID(), err)
 			}
@@ -330,7 +333,7 @@ func (p *V2) dispatcher() {
 			p.Lock()
 			for _, dev := range p.devices {
 				if err := dev.Close(); err != nil {
-					common.Log.Errorf("Failed closing device '%v': %v", dev.ID(), err)
+					common.Log.Errorf("Failed closing device '%d': %v", dev.ID(), err)
 				}
 			}
 			if err := p.socket.Close(); err != nil {
@@ -355,6 +358,94 @@ func (p *V2) dispatcher() {
 	}
 }
 
+// GetLocations returns a slice of all locations known to the protocol, or
+// common.ErrNotFound if no locations are currently known.
+func (p *V2) GetLocations() ([]common.Location, error) {
+	p.RLock()
+	defer p.RUnlock()
+	if len(p.locations) == 0 {
+		return nil, common.ErrNotFound
+	}
+	locations := make([]common.Location, len(p.locations))
+	i := 0
+	for _, location := range p.locations {
+		locations[i] = location
+		i++
+	}
+
+	return locations, nil
+}
+
+// GetGroups returns a slice of all groups known to the client, or
+// common.ErrNotFound if no groups are currently known.
+func (p *V2) GetGroups() ([]common.Group, error) {
+	p.RLock()
+	defer p.RUnlock()
+	if len(p.groups) == 0 {
+		return nil, common.ErrNotFound
+	}
+	groups := make([]common.Group, len(p.groups))
+	i := 0
+	for _, group := range p.groups {
+		groups[i] = group
+		i++
+	}
+
+	return groups, nil
+}
+
+// GetDevices returns a slice of all devices known to the protocol, or
+// common.ErrNotFound if no devices are currently known.
+func (p *V2) GetDevices() ([]common.Device, error) {
+	p.RLock()
+	defer p.RUnlock()
+	if len(p.devices) == 0 {
+		return nil, common.ErrNotFound
+	}
+	devices := make([]common.Device, len(p.devices))
+	i := 0
+	for _, device := range p.devices {
+		devices[i] = device
+		i++
+	}
+
+	return devices, nil
+}
+
+func (p *V2) GetLocation(id string) (common.Location, error) {
+	return p.getLocation(id)
+}
+
+func (p *V2) getLocation(id string) (*device.Location, error) {
+	p.RLock()
+	location, ok := p.locations[id]
+	p.RUnlock()
+	if !ok {
+		return nil, common.ErrNotFound
+	}
+
+	return location, nil
+}
+
+func (p *V2) GetGroup(id string) (common.Group, error) {
+	return p.getGroup(id)
+}
+
+func (p *V2) getGroup(id string) (*device.Group, error) {
+	p.RLock()
+	group, ok := p.groups[id]
+	p.RUnlock()
+	if !ok {
+		return nil, common.ErrNotFound
+	}
+
+	return group, nil
+}
+
+func (p *V2) GetDevice(id uint64) (common.Device, error) {
+	return p.getDevice(id)
+}
+
 func (p *V2) getDevice(id uint64) (device.GenericDevice, error) {
 	p.RLock()
 	dev, ok := p.devices[id]
@@ -367,7 +458,7 @@ func (p *V2) getDevice(id uint64) (device.GenericDevice, error) {
 }
 
 func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
-	common.Log.Debugf("Processing packet from %v: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", addr.IP, pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+	common.Log.Debugf("Processing packet from %v: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", addr.IP, pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 
 	// Update device seen time for any targeted packets
 	if pkt.Target != 0 {
@@ -383,43 +474,43 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 		case device.StatePower:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping StatePower packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping StatePower packet for unknown device: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 			err = dev.SetStatePower(pkt)
 			if err != nil {
-				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Failed setting StatePower on device: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 		case device.StateLabel:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping StateLabel packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping StateLabel packet for unknown device: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 			err = dev.SetStateLabel(pkt)
 			if err != nil {
-				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Failed setting StatePower on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 		case device.State:
 			dev, err := p.getDevice(pkt.GetTarget())
 			if err != nil {
-				common.Log.Debugf("Skipping State packet for unknown device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping State packet for unknown device: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 			light, ok := dev.(*device.Light)
 			if !ok {
-				common.Log.Debugf("Skipping State packet for non-light device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Skipping State packet for non-light device: source %d, type %d, sequence %d, target %d, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 			err = light.SetState(pkt)
 			if err != nil {
-				common.Log.Debugf("Error setting State on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+				common.Log.Debugf("Failed setting State on device: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 				return
 			}
 		default:
-			common.Log.Debugf("Skipping packet with non-local source: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v: %+v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired(), *pkt)
+			common.Log.Debugf("Skipping packet with non-local source: source %v, type %v, sequence %v, target %v, tagged %v, resRequired %v, ackRequired %v", pkt.GetSource(), pkt.GetType(), pkt.GetSequence(), pkt.GetTarget(), pkt.GetTagged(), pkt.GetResRequired(), pkt.GetAckRequired())
 		}
 		return
 	}
@@ -448,15 +539,15 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 		p.deviceQueue <- dev
 	default:
 		if pkt.GetTarget() == 0 {
-			common.Log.Debugf("Skipping packet without target: %+v", *pkt)
+			common.Log.Debugf("Skipping packet without target")
 			return
 		}
 		dev, err := p.getDevice(pkt.GetTarget())
 		if err != nil {
-			common.Log.Errorf("No known device with ID %v", pkt.GetTarget())
+			common.Log.Errorf("No known device with ID %d", pkt.GetTarget())
 			return
 		}
-		common.Log.Debugf("Returning packet to device %v: %+v", dev.ID(), *pkt)
+		common.Log.Debugf("Returning packet to device %d", dev.ID())
 		dev.Handle(pkt)
 	}
 }
@@ -467,22 +558,27 @@ func (p *V2) addLocation(pkt *packet.Packet) {
 		common.Log.Errorf("Error parsing location: %v", err)
 		return
 	}
-	p.RLock()
-	location, ok := p.locations[l.ID()]
-	p.RUnlock()
-	if !ok {
-		p.Lock()
-		p.locations[l.ID()] = l
-		p.Unlock()
-		if err := p.publish(common.EventNewLocation{Location: l}); err != nil {
-			common.Log.Errorf("Error adding location to client: %v", err)
-			return
-		}
-	} else {
+	location, err := p.getLocation(l.ID())
+	if err == nil {
 		if err := location.Parse(pkt); err != nil {
 			common.Log.Errorf("Error parsing location: %v", err)
 		}
+		return
 	}
+
+	p.Lock()
+	p.locations[l.ID()] = l
+	p.Unlock()
+	if err := p.publish(common.EventNewLocation{Location: l}); err != nil {
+		common.Log.Errorf("Error adding location to client: %v", err)
+		return
+	}
+}
+
+func (p *V2) removeLocation(id string) {
+	p.Lock()
+	delete(p.locations, id)
+	p.Unlock()
 }
 
 func (p *V2) addGroup(pkt *packet.Packet) {
@@ -491,22 +587,27 @@ func (p *V2) addGroup(pkt *packet.Packet) {
 		common.Log.Errorf("Error parsing group: %v", err)
 		return
 	}
-	p.RLock()
-	group, ok := p.groups[g.ID()]
-	p.RUnlock()
-	if !ok {
-		p.Lock()
-		p.groups[g.ID()] = g
-		p.Unlock()
-		if err := p.publish(common.EventNewGroup{Group: g}); err != nil {
-			common.Log.Errorf("Error adding group to client: %v", err)
-			return
-		}
-	} else {
+	group, err := p.getGroup(g.ID())
+	if err == nil {
 		if err := group.Parse(pkt); err != nil {
 			common.Log.Errorf("Error parsing group: %v", err)
 		}
+		return
 	}
+
+	p.Lock()
+	p.groups[g.ID()] = g
+	p.Unlock()
+	if err := p.publish(common.EventNewGroup{Group: g}); err != nil {
+		common.Log.Errorf("Error adding group to client: %v", err)
+		return
+	}
+}
+
+func (p *V2) removeGroup(id string) {
+	p.Lock()
+	delete(p.groups, id)
+	p.Unlock()
 }
 
 func (p *V2) addDevices() {
@@ -523,7 +624,7 @@ func (p *V2) addDevices() {
 }
 
 func (p *V2) addDevice(dev device.GenericDevice) {
-	common.Log.Debugf("Attempting to add device: %v", dev.ID())
+	common.Log.Debugf("Attempting to add device: %d", dev.ID())
 	d, err := p.getDevice(dev.ID())
 	known := err == nil
 	if known {
@@ -545,26 +646,47 @@ func (p *V2) addDevice(dev device.GenericDevice) {
 	p.updateLocationGroup(dev)
 
 	if known {
-		common.Log.Debugf("Device already known: %v", dev.ID())
+		common.Log.Debugf("Device already known: %d", dev.ID())
 		return
 	}
 
 	sub, err := dev.NewSubscription()
 	if err != nil {
-		common.Log.Warnf("Error obtaining subscription from %v", dev.ID())
+		common.Log.Warnf("Error obtaining subscription from %d", dev.ID())
 	} else {
 		go p.broadcastLimiter(sub.Events())
 	}
 
-	common.Log.Debugf("Adding device to client: %v", dev.ID())
+	common.Log.Debugf("Adding device to client: %d", dev.ID())
 	if err := p.publish(common.EventNewDevice{Device: dev}); err != nil {
 		common.Log.Errorf("Error adding device to client: %v", err)
 		return
 	}
-	common.Log.Debugf("Added device to client: %v", dev.ID())
+	common.Log.Debugf("Added device to client: %d", dev.ID())
+}
+
+func (p *V2) removeDevice(id uint64) {
+	p.Lock()
+	delete(p.devices, id)
+	p.Unlock()
 }
 
 func (p *V2) updateLocationGroup(dev device.GenericDevice) {
+	groupID, err := dev.GetGroup()
+	if err != nil {
+		common.Log.Warnf("Error retrieving device group: %v", err)
+		return
+	}
+	group, err := p.getGroup(groupID)
+	if err != nil {
+		common.Log.Warnf("Unknown group ID: %s", groupID)
+		return
+	}
+	common.Log.Debugf("Adding device to group (%s): %v", groupID, dev.ID())
+	if err = group.AddDevice(dev); err != nil {
+		common.Log.Debugf("Error adding device to group: %v", err)
+	}
+
 	locationID, err := dev.GetLocation()
 	if err != nil {
 		common.Log.Warnf("Error retrieving device location: %v", err)
@@ -577,27 +699,9 @@ func (p *V2) updateLocationGroup(dev device.GenericDevice) {
 		common.Log.Warnf("Unknown location ID: %v", locationID)
 		return
 	}
-
-	groupID, err := dev.GetGroup()
-	if err != nil {
-		common.Log.Warnf("Error retrieving device group: %v", err)
-		return
-	}
-	p.RLock()
-	group, ok := p.groups[groupID]
-	p.RUnlock()
-	if !ok {
-		common.Log.Warnf("Unknown group ID: %v", groupID)
-		return
-	}
-
 	common.Log.Debugf("Adding device to location (%s): %v", locationID, dev.ID())
-	if err := location.AddDevice(dev); err != nil {
+	if err = location.AddDevice(dev); err != nil {
 		common.Log.Debugf("Error adding device to location: %v", err)
-	}
-	common.Log.Debugf("Adding device to group (%s): %v", groupID, dev.ID())
-	if err := group.AddDevice(dev); err != nil {
-		common.Log.Debugf("Error adding device to group: %v", err)
 	}
 }
 
