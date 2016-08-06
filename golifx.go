@@ -42,6 +42,9 @@ func NewClient(p common.Protocol) (*Client, error) {
 	}
 	c.protocol.SetTimeout(&c.timeout)
 	c.protocol.SetRetryInterval(&c.retryInterval)
+	if err := c.subscribe(); err != nil {
+		return nil, err
+	}
 	err := c.discover()
 	return c, err
 }

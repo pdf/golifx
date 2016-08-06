@@ -32,7 +32,7 @@ func (c *Client) GetLocations() (locations []common.Location, err error) {
 // the location.
 func (c *Client) GetLocationByID(id string) (common.Location, error) {
 	location, err := c.protocol.GetLocation(id)
-	if err != nil {
+	if err == nil {
 		return location, nil
 	}
 
@@ -58,7 +58,7 @@ func (c *Client) GetLocationByID(id string) (common.Location, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewLocation:
@@ -105,7 +105,7 @@ func (c *Client) GetLocationByLabel(label string) (common.Location, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewLocation:
@@ -156,7 +156,7 @@ func (c *Client) GetGroupByID(id string) (common.Group, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewGroup:
@@ -203,7 +203,7 @@ func (c *Client) GetGroupByLabel(label string) (common.Group, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewGroup:
@@ -254,7 +254,7 @@ func (c *Client) GetDeviceByID(id uint64) (common.Device, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewDevice:
@@ -302,7 +302,7 @@ func (c *Client) GetDeviceByLabel(label string) (common.Device, error) {
 		select {
 		case event, ok := <-events:
 			if !ok {
-				return nil, common.ErrNotFound
+				return nil, common.ErrClosed
 			}
 			switch event := event.(type) {
 			case common.EventNewDevice:
@@ -556,9 +556,6 @@ func (c *Client) subscribe() error {
 }
 
 func (c *Client) discover() error {
-	if err := c.subscribe(); err != nil {
-		return err
-	}
 	if c.discoveryInterval == 0 {
 		common.Log.Debugf("Discovery interval is zero, discovery will only be performed once")
 		return c.protocol.Discover()

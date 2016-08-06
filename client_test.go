@@ -24,7 +24,7 @@ var _ = Describe("Golifx", func() {
 		client               *Client
 		protocolSubscription *common.Subscription
 		clientSubscription   *common.Subscription
-		timeout              = 200 * time.Millisecond
+		timeout              = 500 * time.Millisecond
 
 		mockProtocol *mocks.Protocol
 		mockDevice   *mocks.Device
@@ -52,8 +52,10 @@ var _ = Describe("Golifx", func() {
 	It("should send discovery to the protocol on NewClient", func() {
 		var err error
 		mockProtocol = new(mocks.Protocol)
-		mockProtocol.On(`SetClient`, mock.Anything).Return()
-		mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(common.NewSubscription(mockProtocol), nil)
+		mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
+		mockProtocol.On(`SetRetryInterval`, mock.AnythingOfType("*time.Duration")).Return().Once()
+		mockProtocol.On(`SetClient`, mock.Anything).Return().Once()
+		mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(common.NewSubscription(mockProtocol), nil).Once()
 		mockProtocol.On(`Discover`).Return(nil).Once()
 
 		client, err = NewClient(mockProtocol)
@@ -64,12 +66,14 @@ var _ = Describe("Golifx", func() {
 	Describe("Client", func() {
 		BeforeEach(func() {
 			mockProtocol = new(mocks.Protocol)
-			mockProtocol.On(`SetClient`, mock.Anything).Return()
-			mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(common.NewSubscription(mockProtocol), nil)
+			protocolSubscription = common.NewSubscription(mockProtocol)
+			mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+			mockProtocol.On(`SetClient`, mock.Anything).Return().Once()
 			mockProtocol.On(`Discover`).Return(nil).Once()
+			mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
+			mockProtocol.On(`SetRetryInterval`, mock.AnythingOfType("*time.Duration")).Return().Once()
 			client, _ = NewClient(mockProtocol)
 			client.SetTimeout(timeout)
-			protocolSubscription, _ = mockProtocol.NewSubscription()
 			clientSubscription, _ = client.NewSubscription()
 
 			mockDevice = new(mocks.Device)
@@ -79,13 +83,14 @@ var _ = Describe("Golifx", func() {
 		})
 
 		AfterEach(func() {
-			mockProtocol.SubscriptionTarget.On(`CloseSubscription`, mock.Anything).Return(nil)
-			mockProtocol.On(`Close`).Return(nil)
+			mockProtocol.SubscriptionTarget.On(`CloseSubscription`, mock.Anything).Return(nil).Once()
+			mockProtocol.On(`Close`).Return(nil).Once()
 			_ = client.Close()
 		})
 
 		It("should update the timeout", func() {
 			t := 5 * time.Second
+			mockProtocol.On(`SetTimeout`, t).Return().Once()
 			client.SetTimeout(t)
 			Expect(client.GetTimeout()).To(Equal(&t))
 		})
@@ -99,6 +104,7 @@ var _ = Describe("Golifx", func() {
 		It("should set the retry to half the timeout if it's >= the timeout", func() {
 			timeout := 10 * time.Second
 			halfTimeout := timeout / 2
+			mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
 			client.SetTimeout(timeout)
 			interval := 10 * time.Second
 			client.SetRetryInterval(interval)
@@ -125,59 +131,76 @@ var _ = Describe("Golifx", func() {
 		})
 
 		It("should send SetPower to the protocol", func() {
-			mockProtocol.On(`SetPower`, true).Return(nil)
+			mockProtocol.On(`SetPower`, true).Return(nil).Once()
 			Expect(client.SetPower(true)).To(Succeed())
 		})
 
 		It("should send SetPowerDuration to the protocol", func() {
 			duration := 5 * time.Second
-			mockProtocol.On(`SetPowerDuration`, true, duration).Return(nil)
+			mockProtocol.On(`SetPowerDuration`, true, duration).Return(nil).Once()
 			Expect(client.SetPowerDuration(true, duration)).To(Succeed())
 		})
 
 		It("should send SetColor to the protocol", func() {
 			color := common.Color{}
 			duration := 1 * time.Millisecond
-			mockProtocol.On(`SetColor`, color, duration).Return(nil)
+			mockProtocol.On(`SetColor`, color, duration).Return(nil).Once()
 			Expect(client.SetColor(color, duration)).To(Succeed())
 		})
 
-		It("should return an error from GetLocations when it knows no locations", func() {
+		It("should return locations", func() {
+			mockProtocol.On(`GetLocations`).Return([]common.Location{mockLocation}, nil).Once()
+			locations, err := client.GetLocations()
+			Expect(len(locations)).To(Equal(1))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error when it knows no locations", func() {
+			mockProtocol.On(`GetLocations`).Return(nil, common.ErrNotFound).Once()
 			locations, err := client.GetLocations()
 			Expect(len(locations)).To(Equal(0))
 			Expect(err).To(Equal(common.ErrNotFound))
 		})
 
-		It("should return an error from GetGroups when it knows no groups", func() {
+		It("should return groups", func() {
+			mockProtocol.On(`GetGroups`).Return([]common.Group{mockGroup}, nil).Once()
+			groups, err := client.GetGroups()
+			Expect(len(groups)).To(Equal(1))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error when it knows no groups", func() {
+			mockProtocol.On(`GetGroups`).Return(nil, common.ErrNotFound).Once()
 			groups, err := client.GetGroups()
 			Expect(len(groups)).To(Equal(0))
 			Expect(err).To(Equal(common.ErrNotFound))
 		})
 
 		It("should return an error from GetDevices when it knows no devices", func() {
+			mockProtocol.On(`GetDevices`).Return(nil, common.ErrNotFound).Once()
 			devices, err := client.GetDevices()
 			Expect(len(devices)).To(Equal(0))
 			Expect(err).To(Equal(common.ErrNotFound))
 		})
 
 		It("should close successfully", func() {
-			mockProtocol.On(`Close`).Return(nil)
+			mockProtocol.On(`Close`).Return(nil).Once()
 			Expect(client.Close()).To(Succeed())
 		})
 
 		It("should return an error on failed close", func() {
-			mockProtocol.On(`Close`).Return(errors.New(`close failure`))
+			mockProtocol.On(`Close`).Return(errors.New(`close failure`)).Once()
 			Expect(client.Close()).NotTo(Succeed())
 		})
 
 		It("should return an error on double-close", func() {
-			mockProtocol.On(`Close`).Return(nil)
+			mockProtocol.On(`Close`).Return(nil).Once()
 			Expect(client.Close()).To(Succeed())
 			Expect(client.Close()).To(Equal(common.ErrClosed))
 		})
 
 		It("should publish an EventNewLocation on discovering a location", func(done Done) {
-			mockLocation.Group.On(`ID`).Return(locationID)
+			mockLocation.Group.On(`ID`).Return(locationID).Once()
 			event := common.EventNewLocation{Location: mockLocation}
 			ch := make(chan interface{})
 			go func() {
@@ -190,7 +213,7 @@ var _ = Describe("Golifx", func() {
 		})
 
 		It("should publish an EventNewGroup on discovering a group", func(done Done) {
-			mockGroup.On(`ID`).Return(groupID)
+			mockGroup.On(`ID`).Return(groupID).Once()
 			event := common.EventNewGroup{Group: mockGroup}
 			ch := make(chan interface{})
 			go func() {
@@ -203,7 +226,7 @@ var _ = Describe("Golifx", func() {
 		})
 
 		It("should publish an EventNewDevice on discovering a device", func(done Done) {
-			mockDevice.On(`ID`).Return(deviceID)
+			mockDevice.On(`ID`).Return(deviceID).Once()
 			event := common.EventNewDevice{Device: mockDevice}
 			ch := make(chan interface{})
 			go func() {
@@ -215,116 +238,26 @@ var _ = Describe("Golifx", func() {
 			close(done)
 		})
 
-		It("should add a location", func(done Done) {
-			mockLocation.Group.On(`ID`).Return(locationID)
-			ch := make(chan bool)
-			go func() {
-				<-clientSubscription.Events()
-				ch <- true
-			}()
-			_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
-			<-ch
-			locations, err := client.GetLocations()
-			Expect(len(locations)).To(Equal(1))
-			Expect(err).NotTo(HaveOccurred())
-			close(done)
-		})
-
-		It("should add a group", func(done Done) {
-			mockGroup.On(`ID`).Return(groupID)
-			ch := make(chan bool)
-			go func() {
-				<-clientSubscription.Events()
-				ch <- true
-			}()
-			_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
-			<-ch
-			groups, err := client.GetGroups()
-			Expect(len(groups)).To(Equal(1))
-			Expect(err).NotTo(HaveOccurred())
-			close(done)
-		})
-
-		It("should add a device", func(done Done) {
-			mockDevice.On(`ID`).Return(deviceID)
-			ch := make(chan bool)
-			go func() {
-				<-clientSubscription.Events()
-				ch <- true
-			}()
-			_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
-			<-ch
-			devices, err := client.GetDevices()
-			Expect(len(devices)).To(Equal(1))
-			Expect(err).NotTo(HaveOccurred())
-			close(done)
-		})
-
 		Context("with locations", func() {
-
-			BeforeEach(func() {
-				mockLocation.Group.On(`ID`).Return(locationID).Once()
-				clientSubscription, _ = client.NewSubscription()
-				_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
-				<-clientSubscription.Events()
-			})
-
-			Context("adding a location", func() {
-				It("should return the location", func() {
-					locations, err := client.GetLocations()
-					Expect(len(locations)).To(Equal(1))
-					Expect(locations[0]).To(Equal(mockLocation))
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should not add a duplicate location", func(done Done) {
-					var err error
-					Expect(err).NotTo(HaveOccurred())
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
-					})
-					mockLocation.Group.On(`ID`).Return(locationID).Once()
-					_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
-					Expect(<-ch).To(Equal(true))
-					locations, err := client.GetLocations()
-					Expect(len(locations)).To(Equal(1))
-					Expect(err).NotTo(HaveOccurred())
-					close(done)
-				})
-
-				It("should add another location", func(done Done) {
-					mockLocation.Group.On(`ID`).Return(locationUnknownID).Once()
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- true
-					}()
-					_ = protocolSubscription.Write(common.EventNewLocation{Location: mockLocation})
-					<-ch
-					locations, _ := client.GetLocations()
-					Expect(len(locations)).To(Equal(2))
-					close(done)
-				})
-			})
 
 			Context("finding a location", func() {
 				It("should find it by ID", func() {
+					mockProtocol.On(`GetLocation`, locationID).Return(mockLocation, nil).Once()
 					loc, err := client.GetLocationByID(locationID)
 					Expect(loc).To(Equal(mockLocation))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return an error when the ID is not known", func() {
+					mockProtocol.On(`GetLocation`, locationUnknownID).Return(&mocks.Location{}, common.ErrNotFound).Once()
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					_, err := client.GetLocationByID(locationUnknownID)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
 
 				It("should find it by label", func() {
+					mockProtocol.On(`GetLocations`).Return([]common.Location{mockLocation}, nil).Once()
 					mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
 					loc, err := client.GetLocationByLabel(locationLabel)
 					Expect(loc).To(Equal(mockLocation))
@@ -332,7 +265,10 @@ var _ = Describe("Golifx", func() {
 				})
 
 				It("should return an error when the label is not known", func() {
-					mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil)
+					mockProtocol.On(`GetLocations`).Return([]common.Location{mockLocation}, nil).Once()
+					mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					_, err := client.GetLocationByLabel(locationUnknownLabel)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
@@ -342,12 +278,16 @@ var _ = Describe("Golifx", func() {
 					It("should find it by ID", func(done Done) {
 						locChan := make(chan common.Location)
 						errChan := make(chan error)
-						unknownLocation := new(mocks.Location)
+						mockProtocol.On(`GetLocation`, locationUnknownID).Return(&mocks.Location{}, common.ErrNotFound).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						go func() {
 							loc, err := client.GetLocationByID(locationUnknownID)
 							errChan <- err
 							locChan <- loc
 						}()
+						unknownLocation := new(mocks.Location)
 						unknownLocation.Group.On(`ID`).Return(locationUnknownID).Once()
 						_ = protocolSubscription.Write(common.EventNewLocation{Location: unknownLocation})
 						Expect(<-errChan).NotTo(HaveOccurred())
@@ -358,13 +298,17 @@ var _ = Describe("Golifx", func() {
 					It("should find it by label", func(done Done) {
 						locChan := make(chan common.Location)
 						errChan := make(chan error)
-						unknownLocation := new(mocks.Location)
+						mockProtocol.On(`GetLocations`).Return([]common.Location{mockLocation}, nil).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
 						go func() {
 							loc, err := client.GetLocationByLabel(locationUnknownLabel)
 							errChan <- err
 							locChan <- loc
 						}()
+						unknownLocation := new(mocks.Location)
 						unknownLocation.Group.On(`ID`).Return(locationUnknownID).Once()
 						unknownLocation.Group.On(`GetLabel`).Return(locationUnknownLabel, nil).Once()
 						_ = protocolSubscription.Write(common.EventNewLocation{Location: unknownLocation})
@@ -377,7 +321,11 @@ var _ = Describe("Golifx", func() {
 
 				Context("with zero timeout", func() {
 					BeforeEach(func() {
+						mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
 						client.SetTimeout(0)
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					})
 
 					It("should not timeout searching by ID", func(done Done) {
@@ -385,130 +333,66 @@ var _ = Describe("Golifx", func() {
 							close(done)
 						})
 
+						mockProtocol.On(`GetLocation`, locationUnknownID).Return(&mocks.Location{}, common.ErrNotFound).Once()
 						_, err := client.GetLocationByID(locationUnknownID)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("should not timeout searching by label", func(done Done) {
-						time.AfterFunc(10*time.Millisecond, func() {
+					It("should not timeout searching by label with results", func(done Done) {
+						time.AfterFunc(100*time.Millisecond, func() {
 							close(done)
 						})
 
-						mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil)
+						mockProtocol.On(`GetLocations`).Return([]common.Location{mockLocation}, nil).Once()
+						mockLocation.Group.On(`GetLabel`).Return(locationLabel, nil).Once()
+						_, err := client.GetLocationByLabel(locationUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label without results", func(done Done) {
+						time.AfterFunc(100*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockProtocol.On(`GetLocations`).Return(nil, common.ErrNotFound).Once()
 						_, err := client.GetLocationByLabel(locationUnknownLabel)
 						Expect(err).NotTo(HaveOccurred())
 					})
 				})
 			})
-
-			Context("removing a location", func() {
-				It("should emit an EventExpiredLocation when a location is removed", func(done Done) {
-					mockLocation.Group.On(`ID`).Return(locationID).Once()
-					event := common.EventExpiredLocation{Location: mockLocation}
-					ch := make(chan interface{})
-					go func() {
-						evt := <-clientSubscription.Events()
-						ch <- evt
-					}()
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(event))
-					close(done)
-				})
-
-				It("should not remove it when it is not known", func(done Done) {
-					mockLocation.Group.On(`ID`).Return(locationUnknownID).Once()
-					event := common.EventExpiredLocation{Location: mockLocation}
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
-					})
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(true))
-					locations, _ := client.GetLocations()
-					Expect(len(locations)).To(Equal(1))
-					close(done)
-				})
-
-			})
 		})
 
 		Context("with groups", func() {
 
-			BeforeEach(func() {
-				mockGroup.On(`ID`).Return(groupID).Once()
-				clientSubscription, _ = client.NewSubscription()
-				_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
-				<-clientSubscription.Events()
-			})
-
-			Context("adding a group", func() {
-				It("should return the group", func() {
-					groups, err := client.GetGroups()
-					Expect(len(groups)).To(Equal(1))
-					Expect(groups[0]).To(Equal(mockGroup))
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should not add a duplicate group", func(done Done) {
-					var err error
-					Expect(err).NotTo(HaveOccurred())
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
-					})
-					mockGroup.On(`ID`).Return(groupID).Once()
-					_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
-					Expect(<-ch).To(Equal(true))
-					groups, err := client.GetGroups()
-					Expect(len(groups)).To(Equal(1))
-					Expect(err).NotTo(HaveOccurred())
-					close(done)
-				})
-
-				It("should add another group", func(done Done) {
-					mockGroup.On(`ID`).Return(groupUnknownID).Once()
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- true
-					}()
-					_ = protocolSubscription.Write(common.EventNewGroup{Group: mockGroup})
-					<-ch
-					groups, _ := client.GetGroups()
-					Expect(len(groups)).To(Equal(2))
-					close(done)
-				})
-			})
-
 			Context("finding a group", func() {
 				It("should find it by ID", func() {
-					grp, err := client.GetGroupByID(groupID)
-					Expect(grp).To(Equal(mockGroup))
+					mockProtocol.On(`GetGroup`, groupID).Return(mockGroup, nil).Once()
+					loc, err := client.GetGroupByID(groupID)
+					Expect(loc).To(Equal(mockGroup))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return an error when the ID is not known", func() {
+					mockProtocol.On(`GetGroup`, groupUnknownID).Return(&mocks.Group{}, common.ErrNotFound).Once()
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					_, err := client.GetGroupByID(groupUnknownID)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
 
 				It("should find it by label", func() {
+					mockProtocol.On(`GetGroups`).Return([]common.Group{mockGroup}, nil).Once()
 					mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
-					grp, err := client.GetGroupByLabel(groupLabel)
-					Expect(grp).To(Equal(mockGroup))
+					loc, err := client.GetGroupByLabel(groupLabel)
+					Expect(loc).To(Equal(mockGroup))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return an error when the label is not known", func() {
-					mockGroup.On(`GetLabel`).Return(groupLabel, nil)
+					mockProtocol.On(`GetGroups`).Return([]common.Group{mockGroup}, nil).Once()
+					mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					_, err := client.GetGroupByLabel(groupUnknownLabel)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
@@ -518,12 +402,16 @@ var _ = Describe("Golifx", func() {
 					It("should find it by ID", func(done Done) {
 						grpChan := make(chan common.Group)
 						errChan := make(chan error)
-						unknownGroup := new(mocks.Group)
+						mockProtocol.On(`GetGroup`, groupUnknownID).Return(&mocks.Group{}, common.ErrNotFound).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						go func() {
-							grp, err := client.GetGroupByID(groupUnknownID)
+							loc, err := client.GetGroupByID(groupUnknownID)
 							errChan <- err
-							grpChan <- grp
+							grpChan <- loc
 						}()
+						unknownGroup := new(mocks.Group)
 						unknownGroup.On(`ID`).Return(groupUnknownID).Once()
 						_ = protocolSubscription.Write(common.EventNewGroup{Group: unknownGroup})
 						Expect(<-errChan).NotTo(HaveOccurred())
@@ -534,13 +422,17 @@ var _ = Describe("Golifx", func() {
 					It("should find it by label", func(done Done) {
 						grpChan := make(chan common.Group)
 						errChan := make(chan error)
-						unknownGroup := new(mocks.Group)
+						mockProtocol.On(`GetGroups`).Return([]common.Group{mockGroup}, nil).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
 						go func() {
-							grp, err := client.GetGroupByLabel(groupUnknownLabel)
+							loc, err := client.GetGroupByLabel(groupUnknownLabel)
 							errChan <- err
-							grpChan <- grp
+							grpChan <- loc
 						}()
+						unknownGroup := new(mocks.Group)
 						unknownGroup.On(`ID`).Return(groupUnknownID).Once()
 						unknownGroup.On(`GetLabel`).Return(groupUnknownLabel, nil).Once()
 						_ = protocolSubscription.Write(common.EventNewGroup{Group: unknownGroup})
@@ -553,7 +445,11 @@ var _ = Describe("Golifx", func() {
 
 				Context("with zero timeout", func() {
 					BeforeEach(func() {
+						mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
 						client.SetTimeout(0)
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					})
 
 					It("should not timeout searching by ID", func(done Done) {
@@ -561,137 +457,56 @@ var _ = Describe("Golifx", func() {
 							close(done)
 						})
 
+						mockProtocol.On(`GetGroup`, groupUnknownID).Return(&mocks.Group{}, common.ErrNotFound).Once()
 						_, err := client.GetGroupByID(groupUnknownID)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("should not timeout searching by label", func(done Done) {
-						time.AfterFunc(10*time.Millisecond, func() {
+					It("should not timeout searching by label with results", func(done Done) {
+						time.AfterFunc(100*time.Millisecond, func() {
 							close(done)
 						})
 
-						mockGroup.On(`GetLabel`).Return(groupLabel, nil)
+						mockProtocol.On(`GetGroups`).Return([]common.Group{mockGroup}, nil).Once()
+						mockGroup.On(`GetLabel`).Return(groupLabel, nil).Once()
+						_, err := client.GetGroupByLabel(groupUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label without results", func(done Done) {
+						time.AfterFunc(100*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockProtocol.On(`GetGroups`).Return(nil, common.ErrNotFound).Once()
 						_, err := client.GetGroupByLabel(groupUnknownLabel)
 						Expect(err).NotTo(HaveOccurred())
 					})
 				})
 			})
-
-			Context("removing a group", func() {
-				It("should emit an EventExpiredGroup when a group is removed", func(done Done) {
-					mockGroup.On(`ID`).Return(groupID).Once()
-					event := common.EventExpiredGroup{Group: mockGroup}
-					ch := make(chan interface{})
-					go func() {
-						evt := <-clientSubscription.Events()
-						ch <- evt
-					}()
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(event))
-					close(done)
-				})
-
-				It("should not remove it when it is not known", func(done Done) {
-					mockGroup.On(`ID`).Return(groupUnknownID).Once()
-					event := common.EventExpiredGroup{Group: mockGroup}
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
-					})
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(true))
-					groups, _ := client.GetGroups()
-					Expect(len(groups)).To(Equal(1))
-					close(done)
-				})
-
-			})
 		})
 
 		Context("with devices", func() {
 
-			BeforeEach(func() {
-				mockDevice.On(`ID`).Return(deviceID).Once()
-				clientSubscription, _ = client.NewSubscription()
-				_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
-				<-clientSubscription.Events()
-			})
-
-			Context("adding a device", func() {
-				It("should return the device", func() {
-					devices, err := client.GetDevices()
-					Expect(len(devices)).To(Equal(1))
-					Expect(devices[0]).To(Equal(mockDevice))
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should not add a duplicate device", func(done Done) {
-					var err error
-					Expect(err).NotTo(HaveOccurred())
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
-					})
-					mockDevice.On(`ID`).Return(deviceID).Once()
-					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
-					Expect(<-ch).To(Equal(true))
-					devices, err := client.GetDevices()
-					Expect(len(devices)).To(Equal(1))
-					Expect(err).NotTo(HaveOccurred())
-					close(done)
-				})
-
-				It("should add another device", func(done Done) {
-					mockDevice.On(`ID`).Return(deviceUnknownID).Once()
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- true
-					}()
-					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockDevice})
-					<-ch
-					devices, _ := client.GetDevices()
-					Expect(len(devices)).To(Equal(2))
-					close(done)
-				})
-
-				It("should add a light", func(done Done) {
-					mockLight.Device.On(`ID`).Return(lightID).Once()
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- true
-					}()
-					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
-					<-ch
-					devices, _ := client.GetDevices()
-					Expect(len(devices)).To(Equal(2))
-					close(done)
-				})
-
-			})
-
 			Context("finding a device", func() {
 				It("should find it by ID", func() {
+					mockProtocol.On(`GetDevice`, deviceID).Return(mockDevice, nil).Once()
 					dev, err := client.GetDeviceByID(deviceID)
 					Expect(dev).To(Equal(mockDevice))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return an error when the ID is not known", func() {
+					mockProtocol.On(`GetDevice`, deviceUnknownID).Return(&mocks.Device{}, common.ErrNotFound).Once()
+					protocolSubscription = common.NewSubscription(mockProtocol)
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					_, err := client.GetDeviceByID(deviceUnknownID)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
 
 				It("should find it by label", func() {
+					mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice}, nil).Once()
 					mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
 					dev, err := client.GetDeviceByLabel(deviceLabel)
 					Expect(dev).To(Equal(mockDevice))
@@ -699,7 +514,11 @@ var _ = Describe("Golifx", func() {
 				})
 
 				It("should return an error when the label is not known", func() {
-					mockDevice.On(`GetLabel`).Return(deviceLabel, nil)
+					mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice}, common.ErrNotFound).Once()
+					protocolSubscription = common.NewSubscription(mockProtocol)
+					mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+					mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
+					mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
 					_, err := client.GetDeviceByLabel(deviceUnknownLabel)
 					Expect(err).To(MatchError(common.ErrNotFound))
 				})
@@ -709,12 +528,16 @@ var _ = Describe("Golifx", func() {
 					It("should find it by ID", func(done Done) {
 						devChan := make(chan common.Device)
 						errChan := make(chan error)
-						unknownDevice := new(mocks.Device)
+						mockProtocol.On(`GetDevice`, deviceUnknownID).Return(&mocks.Device{}, common.ErrNotFound).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						go func() {
-							dev, err := client.GetDeviceByID(deviceUnknownID)
+							loc, err := client.GetDeviceByID(deviceUnknownID)
 							errChan <- err
-							devChan <- dev
+							devChan <- loc
 						}()
+						unknownDevice := new(mocks.Device)
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
 						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
 						Expect(<-errChan).NotTo(HaveOccurred())
@@ -725,13 +548,17 @@ var _ = Describe("Golifx", func() {
 					It("should find it by label", func(done Done) {
 						devChan := make(chan common.Device)
 						errChan := make(chan error)
-						unknownDevice := new(mocks.Device)
+						mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice}, nil).Once()
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 						mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
 						go func() {
-							dev, err := client.GetDeviceByLabel(deviceUnknownLabel)
+							loc, err := client.GetDeviceByLabel(deviceUnknownLabel)
 							errChan <- err
-							devChan <- dev
+							devChan <- loc
 						}()
+						unknownDevice := new(mocks.Device)
 						unknownDevice.On(`ID`).Return(deviceUnknownID).Once()
 						unknownDevice.On(`GetLabel`).Return(deviceUnknownLabel, nil).Once()
 						_ = protocolSubscription.Write(common.EventNewDevice{Device: unknownDevice})
@@ -744,7 +571,11 @@ var _ = Describe("Golifx", func() {
 
 				Context("with zero timeout", func() {
 					BeforeEach(func() {
+						mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
 						client.SetTimeout(0)
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					})
 
 					It("should not timeout searching by ID", func(done Done) {
@@ -752,99 +583,78 @@ var _ = Describe("Golifx", func() {
 							close(done)
 						})
 
+						mockProtocol.On(`GetDevice`, deviceUnknownID).Return(&mocks.Device{}, common.ErrNotFound).Once()
 						_, err := client.GetDeviceByID(deviceUnknownID)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("should not timeout searching by label", func(done Done) {
+					It("should not timeout searching by label with results", func(done Done) {
 						time.AfterFunc(10*time.Millisecond, func() {
 							close(done)
 						})
 
-						mockDevice.On(`GetLabel`).Return(deviceLabel, nil)
+						mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice}, nil).Once()
+						mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
 						_, err := client.GetDeviceByLabel(deviceUnknownLabel)
 						Expect(err).NotTo(HaveOccurred())
 					})
-				})
-			})
 
-			Context("removing a device", func() {
-				It("should emit an EventExpiredDevice when a device is removed", func(done Done) {
-					mockDevice.On(`ID`).Return(deviceID).Once()
-					event := common.EventExpiredDevice{Device: mockDevice}
-					ch := make(chan interface{})
-					go func() {
-						evt := <-clientSubscription.Events()
-						ch <- evt
-					}()
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(event))
-					close(done)
-				})
+					It("should not timeout searching by label without results", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
 
-				It("should not remove it when it is not known", func(done Done) {
-					mockDevice.On(`ID`).Return(deviceUnknownID).Once()
-					event := common.EventExpiredDevice{Device: mockDevice}
-					ch := make(chan bool)
-					go func() {
-						<-clientSubscription.Events()
-						ch <- false
-					}()
-					time.AfterFunc(timeout*2, func() {
-						ch <- true
+						mockProtocol.On(`GetDevices`).Return(nil, common.ErrNotFound).Once()
+						_, err := client.GetDeviceByLabel(deviceUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
 					})
-					_ = protocolSubscription.Write(event)
-					Expect(<-ch).To(Equal(true))
-					devices, _ := client.GetDevices()
-					Expect(len(devices)).To(Equal(1))
-					close(done)
-				})
 
+				})
 			})
 
 			It("should not return any lights", func() {
+				mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice}, nil).Once()
 				lights, err := client.GetLights()
 				Expect(len(lights)).To(Equal(0))
 				Expect(err).To(MatchError(common.ErrNotFound))
 			})
 
 			Context("with lights", func() {
-				BeforeEach(func() {
-					mockLight.Device.On(`ID`).Return(lightID).Once()
-					clientSubscription, _ = client.NewSubscription()
-					_ = protocolSubscription.Write(common.EventNewDevice{Device: mockLight})
-					<-clientSubscription.Events()
-				})
 
 				It("should return only lights", func() {
+					mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice, mockLight}, nil).Once()
 					lights, err := client.GetLights()
 					Expect(len(lights)).To(Equal(1))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return it by ID when known", func() {
+					mockProtocol.On(`GetDevice`, lightID).Return(mockLight, nil).Once()
 					light, err := client.GetLightByID(lightID)
 					Expect(light).To(Equal(mockLight))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should not return a known device by ID if it is not a light", func() {
+					mockProtocol.On(`GetDevice`, deviceID).Return(mockDevice, nil).Once()
 					light, err := client.GetLightByID(deviceID)
 					Expect(light).To(BeNil())
 					Expect(err).To(HaveOccurred())
 				})
 
 				It("should return it by label when known", func() {
-					mockDevice.On(`GetLabel`).Return(deviceLabel, nil)
-					mockLight.Device.On(`GetLabel`).Return(lightLabel, nil)
+					mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice, mockLight}, nil).Once()
+					mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
+					mockLight.Device.On(`GetLabel`).Return(lightLabel, nil).Once()
 					light, err := client.GetLightByLabel(lightLabel)
 					Expect(light).To(Equal(mockLight))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should not return a known device by label if it is not a light", func() {
-					mockDevice.On(`GetLabel`).Return(deviceLabel, nil)
-					mockLight.Device.On(`GetLabel`).Return(lightLabel, nil)
+					mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice, mockLight}, nil).Once()
+					mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
+					mockLight.Device.On(`GetLabel`).Return(lightLabel, nil).Once()
 					light, err := client.GetLightByLabel(deviceLabel)
 					Expect(light).To(BeNil())
 					Expect(err).To(MatchError(common.ErrDeviceInvalidType))
@@ -852,7 +662,11 @@ var _ = Describe("Golifx", func() {
 
 				Context("with zero timeout", func() {
 					BeforeEach(func() {
+						mockProtocol.On(`SetTimeout`, mock.AnythingOfType("*time.Duration")).Return().Once()
 						client.SetTimeout(0)
+						protocolSubscription = common.NewSubscription(mockProtocol)
+						mockProtocol.SubscriptionTarget.On(`NewSubscription`).Return(protocolSubscription, nil).Once()
+						mockProtocol.SubscriptionTarget.On(`CloseSubscription`, protocolSubscription).Return(nil).Once()
 					})
 
 					It("should not timeout searching by ID", func(done Done) {
@@ -860,17 +674,29 @@ var _ = Describe("Golifx", func() {
 							close(done)
 						})
 
+						mockProtocol.On(`GetDevice`, deviceUnknownID).Return(&mocks.Device{}, common.ErrNotFound).Once()
 						_, err := client.GetLightByID(deviceUnknownID)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("should not timeout searching by label", func(done Done) {
+					It("should not timeout searching by label with results", func(done Done) {
 						time.AfterFunc(10*time.Millisecond, func() {
 							close(done)
 						})
 
-						mockDevice.On(`GetLabel`).Return(deviceLabel, nil)
-						mockLight.Device.On(`GetLabel`).Return(lightLabel, nil)
+						mockProtocol.On(`GetDevices`).Return([]common.Device{mockDevice, mockLight}, nil).Once()
+						mockDevice.On(`GetLabel`).Return(deviceLabel, nil).Once()
+						mockLight.Device.On(`GetLabel`).Return(lightLabel, nil).Once()
+						_, err := client.GetLightByLabel(deviceUnknownLabel)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should not timeout searching by label without results", func(done Done) {
+						time.AfterFunc(10*time.Millisecond, func() {
+							close(done)
+						})
+
+						mockProtocol.On(`GetDevices`).Return(nil, common.ErrNotFound).Once()
 						_, err := client.GetLightByLabel(deviceUnknownLabel)
 						Expect(err).NotTo(HaveOccurred())
 					})
