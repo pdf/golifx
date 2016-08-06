@@ -701,9 +701,6 @@ func (d *Device) Close() error {
 		}
 	}
 
-	d.Lock()
-	defer d.Unlock()
-
 	select {
 	case <-d.quitChan:
 		common.Log.Warnf(`device already closed`)
@@ -712,10 +709,14 @@ func (d *Device) Close() error {
 		close(d.quitChan)
 		d.Lock()
 		for seq, res := range d.responseMap {
-			res.ch <- packet.Response{Error: common.ErrClosed}
+			select {
+			case res.ch <- packet.Response{Error: common.ErrClosed}:
+			case <-res.done:
+			default:
+				close(res.done)
+			}
 			res.wg.Wait()
 			close(res.ch)
-			close(res.done)
 			delete(d.responseMap, seq)
 		}
 		d.Unlock()
@@ -751,11 +752,10 @@ func (d *Device) handler() {
 			res.wg.Add(1)
 			select {
 			case res.ch <- pktResponse:
-				res.wg.Done()
 			case <-res.done:
-				res.wg.Done()
 				d.delSeq(seq)
 			}
+			res.wg.Done()
 		}
 	}
 }
@@ -790,8 +790,8 @@ func (d *Device) delSeq(seq uint8) {
 	if !ok {
 		return
 	}
-	d.Lock()
 	res.wg.Wait()
+	d.Lock()
 	close(res.ch)
 	delete(d.responseMap, seq)
 	d.Unlock()

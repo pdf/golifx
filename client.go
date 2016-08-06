@@ -522,11 +522,6 @@ func (c *Client) subscribe() error {
 	events := sub.Events()
 
 	go func() {
-		defer func() {
-			if err = sub.Close(); err != nil {
-				common.Log.Warnf("Failed closing protocol subscription: %v", err)
-			}
-		}()
 		for {
 			select {
 			case <-c.quitChan:

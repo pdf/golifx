@@ -294,7 +294,7 @@ func (p *V2) Close() error {
 		return common.ErrClosed
 	default:
 		close(p.quitChan)
-		p.wg.Done()
+		p.wg.Wait()
 		close(p.deviceQueue)
 	}
 
