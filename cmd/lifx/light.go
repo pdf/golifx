@@ -142,7 +142,7 @@ func lightList(c *cobra.Command, args []string) {
 func getLights() []common.Light {
 	var lights []common.Light
 
-	logger.WithField(`ids`, flagLightLabels).Debug(`Requested IDs`)
+	logger.WithField(`ids`, flagLightIDs).Debug(`Requested IDs`)
 	logger.WithField(`labels`, flagLightLabels).Debug(`Requested labels`)
 
 	if len(flagLightIDs) > 0 {

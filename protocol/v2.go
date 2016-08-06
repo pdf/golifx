@@ -537,6 +537,7 @@ func (p *V2) process(pkt *packet.Packet, addr *net.UDPAddr) {
 		}
 		p.wg.Add(1)
 		p.deviceQueue <- dev
+		p.wg.Done()
 	default:
 		if pkt.GetTarget() == 0 {
 			common.Log.Debugf("Skipping packet without target")
@@ -613,7 +614,6 @@ func (p *V2) removeGroup(id string) {
 func (p *V2) addDevices() {
 	for dev := range p.deviceQueue {
 		p.addDevice(dev)
-		p.wg.Done()
 		// Perform state discovery on lights
 		if l, ok := dev.(*device.Light); ok {
 			if err := l.Get(); err != nil {

@@ -198,7 +198,7 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 	if err := pkt.DecodePayload(&l); err != nil {
 		return err
 	}
-	common.Log.Debugf("Got label (%d): %v", d.id, l.Label)
+	common.Log.Debugf("Got label (%d): %v", d.id, string(l.Label[:]))
 	newLabel := stripNull(string(l.Label[:]))
 	if newLabel != d.CachedLabel() {
 		d.Lock()
@@ -380,10 +380,6 @@ func (d *Device) CachedPower() bool {
 }
 
 func (d *Device) SetPower(state bool) error {
-	if state && d.CachedPower() {
-		return nil
-	}
-
 	p := &payloadPower{}
 	if state {
 		p.Level = math.MaxUint16

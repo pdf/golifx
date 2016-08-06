@@ -145,10 +145,6 @@ func (l *Light) CachedColor() common.Color {
 }
 
 func (l *Light) SetPowerDuration(state bool, duration time.Duration) error {
-	if state != l.CachedPower() {
-		return nil
-	}
-
 	p := new(payloadPowerDuration)
 	if state {
 		p.Level = math.MaxUint16
