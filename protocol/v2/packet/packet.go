@@ -27,7 +27,7 @@ var (
 )
 
 type Response struct {
-	Result Packet
+	Result *Packet
 	Error  error
 }
 
@@ -42,7 +42,7 @@ type Packet struct {
 	mutex       sync.RWMutex
 }
 
-type Chan chan Response
+type Chan chan *Response
 
 type Frame struct {
 	Size uint16 `struc:"little"` // Size of entire message in bytes including this field
@@ -187,7 +187,7 @@ func (p *Packet) Write() error {
 		byteArr[i] = b
 	}
 
-	common.Log.Debugf("Writing packet data: source %v, type %v, sequence %v, target %v, protocol %v, tagged %v, resRequired %v, ackRequired %v, frameOrigin %b: %+v", p.GetSource(), p.GetType(), p.GetSequence(), p.GetTarget(), p.GetProtocol(), p.GetTagged(), p.GetResRequired(), p.GetAckRequired(), p.Frame.OriginTaggedAddressableProtocol, *p)
+	common.Log.Debugf("Writing packet data: source %v, type %v, sequence %v, target %v, protocol %v, tagged %v, resRequired %v, ackRequired %v, frameOrigin %b", p.GetSource(), p.GetType(), p.GetSequence(), p.GetTarget(), p.GetProtocol(), p.GetTagged(), p.GetResRequired(), p.GetAckRequired(), p.Frame.OriginTaggedAddressableProtocol)
 
 	// Write the packet
 	_, err = p.socket.WriteToUDP(byteArr, p.destination)

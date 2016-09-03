@@ -63,7 +63,7 @@ type response struct {
 }
 
 type doneChan chan struct{}
-type responseMap map[uint8]response
+type responseMap map[uint8]*response
 
 type Device struct {
 	id                    uint64
@@ -286,7 +286,7 @@ func (d *Device) GetLabel() (string, error) {
 		return ``, err
 	}
 
-	err = d.SetStateLabel(&pktResponse.Result)
+	err = d.SetStateLabel(pktResponse.Result)
 	if err != nil {
 		return ``, err
 	}
@@ -365,7 +365,7 @@ func (d *Device) GetPower() (bool, error) {
 		return false, err
 	}
 
-	err = d.SetStatePower(&pktResponse.Result)
+	err = d.SetStatePower(pktResponse.Result)
 	if err != nil {
 		return false, err
 	}
@@ -428,7 +428,7 @@ func (d *Device) GetLocation() (ret string, err error) {
 		return ret, err
 	}
 
-	err = d.SetStateLocation(&pktResponse.Result)
+	err = d.SetStateLocation(pktResponse.Result)
 	if err != nil {
 		return ret, err
 	}
@@ -456,7 +456,7 @@ func (d *Device) GetGroup() (ret string, err error) {
 		return ret, err
 	}
 
-	err = d.SetStateGroup(&pktResponse.Result)
+	err = d.SetStateGroup(pktResponse.Result)
 	if err != nil {
 		return ret, err
 	}
@@ -559,7 +559,7 @@ func (d *Device) GetFirmwareVersion() (ret string, err error) {
 		return ret, err
 	}
 
-	err = d.SetStateHostFirmware(&pktResponse.Result)
+	err = d.SetStateHostFirmware(pktResponse.Result)
 	if err != nil {
 		return ret, err
 	}
@@ -568,7 +568,7 @@ func (d *Device) GetFirmwareVersion() (ret string, err error) {
 }
 
 func (d *Device) Handle(pkt *packet.Packet) {
-	d.responseInput <- packet.Response{Result: *pkt}
+	d.responseInput <- &packet.Response{Result: pkt}
 }
 
 func (d *Device) GetAddress() *net.UDPAddr {
@@ -655,13 +655,13 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 					case <-ticker.C:
 						common.Log.Debugf("Retrying send for seq %d on device %d after %d milliseconds", seq, d.ID(), *d.retryInterval/time.Millisecond)
 						if err := pkt.Write(); err != nil {
-							proxyChan <- packet.Response{
+							proxyChan <- &packet.Response{
 								Error: err,
 							}
 							return
 						}
 					case <-timeout:
-						proxyChan <- packet.Response{
+						proxyChan <- &packet.Response{
 							Error: common.ErrTimeout,
 						}
 						return
@@ -706,7 +706,7 @@ func (d *Device) Close() error {
 		d.Lock()
 		for seq, res := range d.responseMap {
 			select {
-			case res.ch <- packet.Response{Error: common.ErrClosed}:
+			case res.ch <- &packet.Response{Error: common.ErrClosed}:
 			case <-res.done:
 			default:
 				close(res.done)
@@ -724,7 +724,7 @@ func (d *Device) Close() error {
 func (d *Device) handler() {
 	var (
 		ok  bool
-		res response
+		res *response
 	)
 
 	for {
@@ -756,14 +756,14 @@ func (d *Device) handler() {
 	}
 }
 
-func (d *Device) addSeq() (seq uint8, res response) {
+func (d *Device) addSeq() (seq uint8, res *response) {
 	d.Lock()
 	d.sequence++
 	if d.sequence == 0 {
 		d.sequence++
 	}
 	seq = d.sequence
-	res = response{
+	res = &response{
 		ch:   make(packet.Chan),
 		done: make(doneChan),
 	}
@@ -773,7 +773,7 @@ func (d *Device) addSeq() (seq uint8, res response) {
 	return seq, res
 }
 
-func (d *Device) getSeq(seq uint8) (res response, ok bool) {
+func (d *Device) getSeq(seq uint8) (res *response, ok bool) {
 	d.RLock()
 	defer d.RUnlock()
 	res, ok = d.responseMap[seq]

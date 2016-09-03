@@ -93,7 +93,7 @@ func (l *Light) Get() error {
 		return pktResponse.Error
 	}
 
-	return l.SetState(&pktResponse.Result)
+	return l.SetState(pktResponse.Result)
 }
 
 func (l *Light) SetColor(color common.Color, duration time.Duration) error {
