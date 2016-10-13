@@ -759,14 +759,25 @@ func (d *Device) handler() {
 				common.Log.Warnf("Couldn't find requestor for seq %d on device %d", seq, d.id)
 				continue
 			}
-			common.Log.Debugf("Returning packet to for seq %d to caller on device %d", seq, d.id)
+			common.Log.Debugf("Returning seq %d to caller on device %d", seq, d.id)
 			res.wg.Add(1)
-			select {
-			case res.ch <- pktResponse:
-			case <-res.done:
-				d.delSeq(seq)
-			}
-			res.wg.Done()
+			go func() {
+				var timeout <-chan time.Time
+
+				if d.timeout == nil || *d.timeout == 0 {
+					timeout = make(<-chan time.Time)
+				} else {
+					timeout = time.After(*d.timeout)
+				}
+				select {
+				case res.ch <- pktResponse:
+				case <-res.done:
+					d.delSeq(seq)
+				case <-timeout:
+					common.Log.Warnf("Timeout returning seq %d to caller on device %d", seq, d.id)
+				}
+				res.wg.Done()
+			}()
 		}
 	}
 }
