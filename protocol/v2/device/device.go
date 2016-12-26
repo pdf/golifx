@@ -54,6 +54,11 @@ const (
 	ProductLifxWhite900BR30        uint32 = 18
 	ProductLifxColor1000BR30       uint32 = 20
 	ProductLifxColor1000           uint32 = 22
+	ProductLifxA19                 uint32 = 27
+	ProductLifxBR30                uint32 = 28
+	ProductLifxPlusA19             uint32 = 29
+	ProductLifxPlusBR30            uint32 = 30
+	ProductLifxZ                   uint32 = 31
 )
 
 type response struct {
