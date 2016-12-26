@@ -725,7 +725,19 @@ func (p *V2) classifyDevice(dev device.GenericDevice) device.GenericDevice {
 	switch vendor {
 	case device.VendorLifx:
 		switch product {
-		case device.ProductLifxOriginal1000, device.ProductLifxColor650, device.ProductLifxWhite800LowVoltage, device.ProductLifxWhite800HighVoltage, device.ProductLifxWhite900BR30, device.ProductLifxColor1000BR30, device.ProductLifxColor1000:
+		case
+			device.ProductLifxOriginal1000,
+			device.ProductLifxColor650,
+			device.ProductLifxWhite800LowVoltage,
+			device.ProductLifxWhite800HighVoltage,
+			device.ProductLifxWhite900BR30,
+			device.ProductLifxColor1000BR30,
+			device.ProductLifxColor1000,
+			device.ProductLifxA19,
+			device.ProductLifxBR30,
+			device.ProductLifxPlusA19,
+			device.ProductLifxPlusBR30,
+			device.ProductLifxZ:
 			p.Lock()
 			d := dev.(*device.Device)
 			d.Lock()
@@ -736,6 +748,8 @@ func (p *V2) classifyDevice(dev device.GenericDevice) device.GenericDevice {
 			d.Unlock()
 			p.Unlock()
 			return l
+		default:
+			common.Log.Warnf("Unknown product %d\n", product)
 		}
 	}
 
