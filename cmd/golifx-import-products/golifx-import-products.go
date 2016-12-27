@@ -71,16 +71,19 @@ func main() {
 
 }
 
+// Generator provides the output buffer and helper functions
 type Generator struct {
 	buf bytes.Buffer
 }
 
+// Printf prints formatted strings to the buffer
 func (g *Generator) Printf(format string, a ...interface{}) {
 	if _, err := fmt.Fprintf(&g.buf, format, a...); err != nil {
 		log.Fatalln(err)
 	}
 }
 
+// Write outputs the buffer to the specified file path
 func (g *Generator) Write(output string) {
 	if err := ioutil.WriteFile(output, g.buf.Bytes(), 0644); err != nil {
 		log.Fatalln(err)
