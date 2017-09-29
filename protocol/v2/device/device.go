@@ -541,6 +541,18 @@ func (d *Device) CachedProduct() *Product {
 	return d.product
 }
 
+func (d *Device) GetProductName() (string, error) {
+	p, err := d.GetProduct()
+	if err != nil {
+		return ``, err
+	}
+	if p == nil {
+		return ``, common.ErrNotFound
+	}
+
+	return p.Name, nil
+}
+
 func (d *Device) CachedFirmwareVersion() string {
 	d.RLock()
 	defer d.RUnlock()
