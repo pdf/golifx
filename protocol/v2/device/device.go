@@ -73,13 +73,13 @@ type Device struct {
 	requestSocket *net.UDPConn
 	responseMap   responseMap
 	responseInput packet.Chan
-	subscriptions map[string]*common.Subscription
 	quitChan      chan struct{}
 	timeout       *time.Duration
 	retryInterval *time.Duration
 	limiter       *time.Timer
 	seen          time.Time
 	reliable      bool
+	common.SubscriptionProvider
 	sync.RWMutex
 }
 
@@ -130,7 +130,6 @@ func (d *Device) init(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *ti
 	d.limiter = time.NewTimer(shared.RateLimit)
 	d.responseMap = make(responseMap)
 	d.responseInput = make(packet.Chan, 32)
-	d.subscriptions = make(map[string]*common.Subscription)
 	d.quitChan = make(chan struct{})
 	d.provisional = true
 	d.Unlock()
@@ -145,31 +144,6 @@ func (d *Device) Discover() error {
 	pkt.SetType(GetService)
 	_, err := d.Send(pkt, false, false)
 	return err
-}
-
-// NewSubscription returns a new *common.Subscription for receiving events from
-// this device.
-func (d *Device) NewSubscription() (*common.Subscription, error) {
-	sub := common.NewSubscription(d)
-	d.Lock()
-	d.subscriptions[sub.ID()] = sub
-	d.Unlock()
-	return sub, nil
-}
-
-// CloseSubscription is a callback for handling the closing of subscriptions.
-func (d *Device) CloseSubscription(sub *common.Subscription) error {
-	d.RLock()
-	_, ok := d.subscriptions[sub.ID()]
-	d.RUnlock()
-	if !ok {
-		return common.ErrNotFound
-	}
-	d.Lock()
-	delete(d.subscriptions, sub.ID())
-	d.Unlock()
-
-	return nil
 }
 
 func (d *Device) Provisional() bool {
@@ -195,9 +169,7 @@ func (d *Device) SetStateLabel(pkt *packet.Packet) error {
 		d.Lock()
 		d.label = newLabel
 		d.Unlock()
-		if err := d.publish(common.EventUpdateLabel{Label: newLabel}); err != nil {
-			return err
-		}
+		d.Notify(common.EventUpdateLabel{Label: newLabel})
 	}
 
 	return nil
@@ -273,6 +245,9 @@ func (d *Device) GetLabel() (string, error) {
 
 	common.Log.Debugf("Waiting for label (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return ``, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return ``, err
 	}
@@ -313,7 +288,8 @@ func (d *Device) SetLabel(label string) error {
 	d.Lock()
 	d.label = label
 	d.Unlock()
-	return d.publish(common.EventUpdateLabel{Label: label})
+	d.Notify(common.EventUpdateLabel{Label: label})
+	return nil
 }
 
 func (d *Device) CachedLabel() string {
@@ -334,9 +310,7 @@ func (d *Device) SetStatePower(pkt *packet.Packet) error {
 		d.Lock()
 		d.power = p.Level
 		d.Unlock()
-		if err := d.publish(common.EventUpdatePower{Power: state}); err != nil {
-			return err
-		}
+		d.Notify(common.EventUpdatePower{Power: state})
 	}
 
 	return nil
@@ -352,6 +326,9 @@ func (d *Device) GetPower() (bool, error) {
 
 	common.Log.Debugf("Waiting for power (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return false, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return false, err
 	}
@@ -396,7 +373,8 @@ func (d *Device) SetPower(state bool) error {
 	d.Lock()
 	d.power = p.Level
 	d.Unlock()
-	return d.publish(common.EventUpdatePower{Power: p.Level > 0})
+	d.Notify(common.EventUpdatePower{Power: p.Level > 0})
+	return nil
 }
 
 func (d *Device) CachedLocation() string {
@@ -415,6 +393,9 @@ func (d *Device) GetLocation() (ret string, err error) {
 
 	common.Log.Debugf("Waiting for location (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return ``, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return ret, err
 	}
@@ -443,6 +424,9 @@ func (d *Device) GetGroup() (ret string, err error) {
 
 	common.Log.Debugf("Waiting for group (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return ``, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return ret, err
 	}
@@ -495,6 +479,9 @@ func (d *Device) GetHardwareVersion() (uint32, error) {
 
 	common.Log.Debugf("Waiting for hardware version (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return 0, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return 0, err
 	}
@@ -570,6 +557,9 @@ func (d *Device) GetFirmwareVersion() (ret string, err error) {
 
 	common.Log.Debugf("Waiting for firmware data (%d)", d.id)
 	pktResponse := <-req
+	if pktResponse == nil {
+		return ``, common.ErrProtocol
+	}
 	if pktResponse.Error != nil {
 		return ret, err
 	}
@@ -598,13 +588,9 @@ func (d *Device) ResetLimiter() {
 
 func (d *Device) resetLimiter(broadcast bool) {
 	if broadcast {
-		if err := d.publish(shared.EventRequestSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventRequestSent on dev %d: %+v", d.id, err)
-		}
+		d.Notify(shared.EventRequestSent{})
 	} else {
-		if err := d.publish(shared.EventBroadcastSent{}); err != nil {
-			common.Log.Warnf("Failed publishing EventBroadcastSent on dev %d: %+v", d.id, err)
-		}
+		d.Notify(shared.EventBroadcastSent{})
 	}
 	d.ResetLimiter()
 }
@@ -635,8 +621,12 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 			go func() {
 				defer func() {
-					close(res.done)
-					close(proxyChan)
+					select {
+					case <-d.quitChan:
+					default:
+						close(res.done)
+						close(proxyChan)
+					}
 				}()
 
 				var (
@@ -652,6 +642,13 @@ func (d *Device) Send(pkt *packet.Packet, ackRequired, responseRequired bool) (p
 
 				for {
 					select {
+					case <-d.quitChan:
+						return
+					default:
+					}
+					select {
+					case <-d.quitChan:
+						return
 					case pktResponse, ok := <-res.ch:
 						if !ok {
 							return
@@ -706,19 +703,14 @@ func (d *Device) SetSeen(seen time.Time) {
 
 // Close cleans up Device resources
 func (d *Device) Close() error {
-	for _, sub := range d.subscriptions {
-		if err := sub.Close(); err != nil {
-			return err
-		}
-	}
+	d.Lock()
+	defer d.Unlock()
 
 	select {
 	case <-d.quitChan:
-		common.Log.Warnf(`device already closed`)
 		return common.ErrClosed
 	default:
 		close(d.quitChan)
-		d.Lock()
 		for seq, res := range d.responseMap {
 			select {
 			case res.ch <- &packet.Response{Error: common.ErrClosed}:
@@ -730,17 +722,13 @@ func (d *Device) Close() error {
 			close(res.ch)
 			delete(d.responseMap, seq)
 		}
-		d.Unlock()
 	}
 
-	return nil
+	return d.SubscriptionProvider.Close()
 }
 
 func (d *Device) handler() {
-	var (
-		ok  bool
-		res *response
-	)
+	var ok bool
 
 	for {
 		select {
@@ -748,10 +736,14 @@ func (d *Device) handler() {
 			return
 		default:
 		}
+		var res *response
 		select {
 		case <-d.quitChan:
 			return
 		case pktResponse := <-d.responseInput:
+			if pktResponse == nil {
+				return
+			}
 			common.Log.Debugf("Handling packet on device %d", d.id)
 			seq := pktResponse.Result.GetSequence()
 			res, ok = d.getSeq(seq)
@@ -817,24 +809,6 @@ func (d *Device) delSeq(seq uint8) {
 	close(res.ch)
 	delete(d.responseMap, seq)
 	d.Unlock()
-}
-
-// Pushes an event to subscribers
-func (d *Device) publish(event interface{}) error {
-	d.RLock()
-	subs := make(map[string]*common.Subscription, len(d.subscriptions))
-	for k, sub := range d.subscriptions {
-		subs[k] = sub
-	}
-	d.RUnlock()
-
-	for _, sub := range subs {
-		if err := sub.Write(event); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool, pkt *packet.Packet) (*Device, error) {

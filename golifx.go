@@ -34,7 +34,6 @@ const (
 func NewClient(p common.Protocol) (*Client, error) {
 	c := &Client{
 		protocol:              p,
-		subscriptions:         make(map[string]*common.Subscription),
 		timeout:               common.DefaultTimeout,
 		retryInterval:         common.DefaultRetryInterval,
 		internalRetryInterval: 10 * time.Millisecond,

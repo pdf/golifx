@@ -55,6 +55,7 @@ does no logging at all.
 
 ```go
 type Client struct {
+	common.SubscriptionProvider
 	sync.RWMutex
 }
 ```
@@ -78,13 +79,6 @@ run.
 func (c *Client) Close() error
 ```
 Close signals the termination of this client, and cleans up resources
-
-#### func (*Client) CloseSubscription
-
-```go
-func (c *Client) CloseSubscription(sub *common.Subscription) error
-```
-CloseSubscription is a callback for handling the closing of subscriptions.
 
 #### func (*Client) GetDeviceByID
 
@@ -205,14 +199,6 @@ func (c *Client) GetTimeout() *time.Duration
 GetTimeout returns the currently configured timeout period for operations on
 this client
 
-#### func (*Client) NewSubscription
-
-```go
-func (c *Client) NewSubscription() (*common.Subscription, error)
-```
-NewSubscription returns a new *common.Subscription for receiving events from
-this client.
-
 #### func (*Client) SetColor
 
 ```go
@@ -300,6 +286,8 @@ var (
 	ErrTimeout = errors.New(`Timed out`)
 	// ErrDeviceInvalidType invalid device type
 	ErrDeviceInvalidType = errors.New(`Invalid device type`)
+	// ErrUnsupported operation is not supported
+	ErrUnsupported = errors.New(`Operation not supported`)
 )
 ```
 
@@ -375,6 +363,8 @@ type Device interface {
 	// CachedFirmwareVersion returns the last known firmware version of the
 	// device
 	CachedFirmwareVersion() string
+	// GetProductName returns the product name of the device
+	GetProductName() (string, error)
 
 	// Device is a SubscriptionTarget
 	SubscriptionTarget
@@ -698,25 +688,19 @@ Warnf handles warn level messages
 
 ```go
 type Subscription struct {
+	sync.Mutex
 }
 ```
 
 Subscription exposes an event channel for consumers, and attaches to a
 SubscriptionTarget, that will feed it with events
 
-#### func  NewSubscription
-
-```go
-func NewSubscription(target SubscriptionTarget) *Subscription
-```
-NewSubscription returns a *Subscription attached to the specified target
-
 #### func (*Subscription) Close
 
 ```go
 func (s *Subscription) Close() error
 ```
-Close cleans up resources and notifies the target that the subscription should
+Close cleans up resources and notifies the provider that the subscription should
 no longer be used. It is important to close subscriptions when you are done with
 them to avoid blocking operations.
 
@@ -727,28 +711,44 @@ func (s *Subscription) Events() <-chan interface{}
 ```
 Events returns a chan reader for reading events published to this subscription
 
-#### func (*Subscription) ID
+#### type SubscriptionProvider
 
 ```go
-func (s *Subscription) ID() string
+type SubscriptionProvider struct {
+	sync.RWMutex
+}
 ```
-ID returns the unique ID for this subscription
 
-#### func (*Subscription) Write
+SubscriptionProvider provides an embedable subscription factory
+
+#### func (*SubscriptionProvider) Close
 
 ```go
-func (s *Subscription) Write(event interface{}) error
+func (s *SubscriptionProvider) Close() (err error)
 ```
-Write pushes an event onto the events channel
+Close all subscriptions
+
+#### func (*SubscriptionProvider) Notify
+
+```go
+func (s *SubscriptionProvider) Notify(event interface{})
+```
+Notify sends the provided event to all subscribers
+
+#### func (*SubscriptionProvider) Subscribe
+
+```go
+func (s *SubscriptionProvider) Subscribe() *Subscription
+```
+Subscribe returns a new Subscription for this provider
 
 #### type SubscriptionTarget
 
 ```go
 type SubscriptionTarget interface {
-	NewSubscription() (*Subscription, error)
-	CloseSubscription(*Subscription) error
+	Subscribe() *Subscription
+	Notify(event interface{})
 }
 ```
 
-SubscriptionTarget defines the interface between a subscription and its target
-object
+SubscriptionTarget generally embeds a SubscriptionProvider
