@@ -3,6 +3,8 @@
 __Note:__ This library is at a moderately early stage - functionality is quite
 solid, but the V2 protocol implementation needs documentation and tests.
 
+*v1.0.0 breaks the API for subscriptions - all subscription targets now just embed common.SubscriptionProvider, see the documentation for those methods below.*
+
 You may find binaries for a trivial CLI application that allows querying and
 controlling your LIFX devices under [releases](https://github.com/pdf/golifx/releases/latest).
 
@@ -37,7 +39,7 @@ type of device you will interact with.
 ```go
 const (
 	// VERSION of this library
-	VERSION = "0.5.1"
+	VERSION = "1.0.0"
 )
 ```
 
