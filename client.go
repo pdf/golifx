@@ -489,8 +489,11 @@ func (c *Client) discover() error {
 
 	go func() {
 		c.RLock()
-		tick := time.Tick(c.discoveryInterval)
+		tick := time.NewTicker(c.discoveryInterval)
 		c.RUnlock()
+		defer func() {
+			tick.Stop()
+		}()
 		for {
 			select {
 			case <-c.quitChan:
@@ -502,7 +505,7 @@ func (c *Client) discover() error {
 			case <-c.quitChan:
 				common.Log.Debugf("Quitting discovery loop")
 				return
-			case <-tick:
+			case <-tick.C:
 				common.Log.Debugf("Performing discovery")
 				_ = c.protocol.Discover()
 			}
