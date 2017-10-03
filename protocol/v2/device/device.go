@@ -775,12 +775,18 @@ func (d *Device) handler() {
 				}
 				select {
 				case res.ch <- pktResponse:
-				case <-res.done:
-					d.delSeq(seq)
+					res.wg.Done()
 				case <-timeout:
+					res.wg.Done()
 					common.Log.Warnf("Timeout returning seq %d to caller on device %d", seq, d.id)
+				case <-res.done:
+					res.wg.Done()
+					select {
+					case <-d.quitChan:
+					default:
+						d.delSeq(seq)
+					}
 				}
-				res.wg.Done()
 			}()
 		}
 	}
@@ -788,6 +794,7 @@ func (d *Device) handler() {
 
 func (d *Device) addSeq() (seq uint8, res *response) {
 	d.Lock()
+	defer d.Unlock()
 	d.sequence++
 	if d.sequence == 0 {
 		d.sequence++
@@ -798,7 +805,6 @@ func (d *Device) addSeq() (seq uint8, res *response) {
 		done: make(doneChan),
 	}
 	d.responseMap[seq] = res
-	d.Unlock()
 
 	return seq, res
 }
@@ -816,11 +822,10 @@ func (d *Device) delSeq(seq uint8) {
 	if !ok {
 		return
 	}
-	res.wg.Wait()
 	d.Lock()
+	defer d.Unlock()
 	close(res.ch)
 	delete(d.responseMap, seq)
-	d.Unlock()
 }
 
 func New(addr *net.UDPAddr, requestSocket *net.UDPConn, timeout *time.Duration, retryInterval *time.Duration, reliable bool, pkt *packet.Packet) (*Device, error) {
