@@ -25,7 +25,7 @@ import (
 
 const (
 	// VERSION of this library
-	VERSION = "1.0.2"
+	VERSION = "1.0.3"
 )
 
 // NewClient returns a pointer to a new Client and any error that occurred
