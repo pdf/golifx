@@ -13,6 +13,8 @@ import (
 
 // V2 implements the LIFX LAN protocol version 2.
 type V2 struct {
+	// IP determines UDP IP for this protocol instance
+	IP net.IP
 	// Port determines UDP port for this protocol instance
 	Port int
 	// Reliable enables reliable comms, requests ACKs for all operations to
@@ -47,7 +49,7 @@ func (p *V2) init() error {
 	if p.Port == 0 {
 		p.Port = shared.DefaultPort
 	}
-	socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{Port: p.Port})
+	socket, err := net.ListenUDP(`udp4`, &net.UDPAddr{IP: p.IP, Port: p.Port})
 	if err != nil {
 		return err
 	}
