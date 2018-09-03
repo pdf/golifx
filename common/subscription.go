@@ -65,8 +65,13 @@ func (s *Subscription) Close() error {
 
 // newSubscription instantiates a new Subscription
 func newSubscription(provider *SubscriptionProvider) *Subscription {
+	u, err := uuid.NewV4()
+	if err != nil {
+		panic(err)
+	}
+
 	return &Subscription{
-		id:       uuid.NewV4(),
+		id:       u,
 		events:   make(chan interface{}, subscriptionChanSize),
 		quitChan: make(chan struct{}),
 		provider: provider,
